@@ -11,8 +11,7 @@ class AuthSerializer(serializers.ModelSerializer):
 
   class Meta:
     model = User
-    # fields = ['id', 'username', 'email', 'password', 'password_confirmation', 'bio']
-    fields = ['id', 'username', 'email', 'password', 'confirmPassword', 'profile_image']
+    fields = ['id', 'username', 'email', 'password', 'confirmPassword']
 
   # def validate_email(self, value):
   #   if 'email.com' in value.lower():

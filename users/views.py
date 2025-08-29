@@ -24,7 +24,10 @@ class SignUpView(APIView):
     return Response({'access': str(refresh.access_token)}, 201)
 
 
+
+
 class SignInView(APIView):
   def post(self, request):
-    # print(request.data)
+    # print('request.data', request.data)
     return Response({"message": "HIT LOGIN ROUTE"})
+
