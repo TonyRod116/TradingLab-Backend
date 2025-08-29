@@ -83,6 +83,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'project.urls'
 
+# URL Configuration
+APPEND_SLASH = False
+
 
 
 TEMPLATES = [
