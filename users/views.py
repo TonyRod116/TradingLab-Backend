@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from users.serializers.common import AuthSerializer
+from rest_framework.permissions import IsAuthenticated
+from users.serializers.common import AuthSerializer, OwnerSerializer
 from users.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -16,7 +17,6 @@ class SignUpView(APIView):
         return Response({'access': str(refresh.access_token)}, 201)
 
 class SignInView(APIView):
-  
     def post(self, request):
         identifier = request.data.get('identifier')  # Puede ser username o email
         password = request.data.get('password')
@@ -55,3 +55,25 @@ class SignInView(APIView):
             }
         })
 
+class UserProfileView(APIView):
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+            serializer = OwnerSerializer(user)
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+class EditProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        serializer = OwnerSerializer(request.user)
+        return Response(serializer.data)
+    
+    def put(self, request):
+        serializer = OwnerSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
