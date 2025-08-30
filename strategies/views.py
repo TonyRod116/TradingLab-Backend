@@ -96,5 +96,5 @@ class StrategyDetailView(APIView):
 
         Strategy.delete()
         return Response(status=204)
-
 # Create your views here.
+

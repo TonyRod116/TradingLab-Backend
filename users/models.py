@@ -3,10 +3,12 @@ from django.contrib.auth.models import AbstractUser
 
 
 class User(AbstractUser):
+    # Custom user fields
     username = models.CharField(max_length=255, unique=True)
     email = models.EmailField(unique=True)
     password = models.CharField(max_length=255)
 
+    # Profile fields
     profile_image = models.URLField(max_length=500, null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

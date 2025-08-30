@@ -20,6 +20,11 @@ class AuthSerializer(serializers.ModelSerializer):
         validated_data.pop('confirmPassword')
         return User.objects.create_user(**validated_data)
 
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'bio', 'profile_image', 'date_joined']
+        read_only_fields = ['id', 'username', 'email', 'date_joined']
 
 class OwnerSerializer(serializers.ModelSerializer):
     class Meta:

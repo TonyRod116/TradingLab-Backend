@@ -1,9 +1,14 @@
 from django.urls import path
-from .views import SignUpView
-from rest_framework_simplejwt.views import TokenObtainPairView
+from .views import SignUpView, SignInView, UserProfileView, EditProfileView
 
+app_name = 'users'
 
 urlpatterns = [
-    path('signup/', SignUpView.as_view()),
-    path('login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # Authentication endpoints
+    path('signup/', SignUpView.as_view(), name='user-signup'),
+    path('login/', SignInView.as_view(), name='user-login'),
+    
+    # Profile management endpoints
+    path('profile/', EditProfileView.as_view(), name='user-profile'),
+    path('profile/<int:user_id>/', UserProfileView.as_view(), name='user-profile-detail'),
 ]
