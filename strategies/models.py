@@ -36,8 +36,34 @@ class Strategy(models.Model):
                                       validators=[MinValueValidator(0.1), MaxValueValidator(100.0)],
                                       help_text='Position size in lots')
     max_positions = models.PositiveIntegerField(default=1, help_text='Max simultaneous positions')
-    stop_loss_pips = models.PositiveIntegerField(default=50, help_text='Stop loss in pips')
-    take_profit_pips = models.PositiveIntegerField(default=100, help_text='Take profit in pips')
+    
+    # Stop Loss configuration
+    stop_loss_type = models.CharField(max_length=20, choices=[
+        ('pips', 'Pips'),
+        ('percentage', 'Percentage'),
+        ('atr', 'ATR'),
+    ], default='pips')
+    stop_loss_value = models.DecimalField(max_digits=10, decimal_places=4, default=50.0,
+                                        help_text='Stop loss value')
+    
+    # Take Profit configuration
+    take_profit_type = models.CharField(max_length=20, choices=[
+        ('pips', 'Pips'),
+        ('percentage', 'Percentage'),
+        ('atr', 'ATR'),
+    ], default='pips')
+    take_profit_value = models.DecimalField(max_digits=10, decimal_places=4, default=100.0,
+                                          help_text='Take profit value')
+    
+    # Trading costs
+    round_turn_commissions = models.DecimalField(max_digits=10, decimal_places=4, default=4.0,
+                                               help_text='Round turn commissions')
+    slippage = models.DecimalField(max_digits=10, decimal_places=4, default=0.5,
+                                 help_text='Slippage in pips')
+    
+    # Legacy fields (keeping for backward compatibility)
+    stop_loss_pips = models.PositiveIntegerField(default=50, help_text='Stop loss in pips (legacy)')
+    take_profit_pips = models.PositiveIntegerField(default=100, help_text='Take profit in pips (legacy)')
     
     # Strategy rules (JSON)
     rules = models.JSONField(default=list, help_text='List of strategy rules')

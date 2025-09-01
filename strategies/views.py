@@ -114,6 +114,82 @@ class StrategyRuleViewSet(viewsets.ModelViewSet):
         return Strategy.objects.get(pk=strategy_pk).rules.all()
 
 
+class StrategyBacktestViewSet(viewsets.ViewSet):
+    """ViewSet for strategy backtesting"""
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=True, methods=['post'])
+    def run_backtest(self, request, pk=None):
+        """Run backtest for a strategy"""
+        try:
+            strategy = Strategy.objects.get(pk=pk, user=request.user)
+            
+            # Placeholder backtest logic
+            backtest_result = {
+                'strategy_id': strategy.id,
+                'strategy_name': strategy.name,
+                'status': 'completed',
+                'start_date': '2024-01-01',
+                'end_date': '2024-12-31',
+                'total_trades': 150,
+                'winning_trades': 95,
+                'losing_trades': 55,
+                'win_rate': 63.33,
+                'profit_factor': 1.85,
+                'max_drawdown': 8.5,
+                'total_return': 24.7,
+                'sharpe_ratio': 1.42,
+                'trades': [
+                    {'date': '2024-01-15', 'type': 'buy', 'price': 4250.0, 'quantity': 1, 'pnl': 25.0},
+                    {'date': '2024-01-16', 'type': 'sell', 'price': 4275.0, 'quantity': 1, 'pnl': 25.0},
+                ]
+            }
+            
+            return Response(backtest_result, status=200)
+            
+        except Strategy.DoesNotExist:
+            return Response({'error': 'Strategy not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+    
+    @action(detail=True, methods=['get'])
+    def backtest_history(self, request, pk=None):
+        """Get backtest history for a strategy"""
+        try:
+            strategy = Strategy.objects.get(pk=pk, user=request.user)
+            
+            # Placeholder backtest history
+            history = [
+                {
+                    'id': 1,
+                    'strategy_id': strategy.id,
+                    'start_date': '2024-01-01',
+                    'end_date': '2024-12-31',
+                    'status': 'completed',
+                    'win_rate': 63.33,
+                    'profit_factor': 1.85,
+                    'created_at': '2024-01-01T10:00:00Z'
+                },
+                {
+                    'id': 2,
+                    'strategy_id': strategy.id,
+                    'start_date': '2023-01-01',
+                    'end_date': '2023-12-31',
+                    'status': 'completed',
+                    'win_rate': 58.7,
+                    'profit_factor': 1.62,
+                    'created_at': '2023-12-31T15:30:00Z'
+                }
+            ]
+            
+            return Response(history, status=200)
+            
+        except Strategy.DoesNotExist:
+            return Response({'error': 'Strategy not found'}, status=404)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
 class StrategyRuleBuilderViewSet(viewsets.ViewSet):
     """ViewSet for rule builder metadata"""
     permission_classes = [IsAuthenticated]

@@ -12,6 +12,10 @@ urlpatterns = [
     path('<int:pk>/archive/', views.StrategyViewSet.as_view({'post': 'archive'}), name='archive-strategy'),
     path('<int:pk>/performance/', views.StrategyViewSet.as_view({'get': 'performance'}), name='strategy-performance'),
     
+    # Backtest routes (matching frontend expectations)
+    path('<int:pk>/backtest/run/', views.StrategyBacktestViewSet.as_view({'post': 'run_backtest'}), name='run-backtest'),
+    path('<int:pk>/backtest/history/', views.StrategyBacktestViewSet.as_view({'get': 'backtest_history'}), name='backtest-history'),
+    
     # Templates
     path('templates/', views.StrategyViewSet.as_view({'get': 'templates'}), name='strategy-templates'),
     path('create-from-template/', views.StrategyViewSet.as_view({'post': 'create_from_template'}), name='create-from-template'),
