@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from .models import Strategy, BacktestResult, Trade
 from .serializers import (
-    StrategySerializer, StrategyListSerializer, BacktestResultSerializer, TradeSerializer,
+    StrategySerializer, StrategyListSerializer, StrategySummarySerializer, BacktestResultSerializer, TradeSerializer,
     BacktestRequestSerializer, BacktestResponseSerializer
 )
 from .backtest_engine import BacktestEngine
@@ -165,7 +165,7 @@ class StrategyViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """
-        Get lightweight summary of all strategies (fast loading)
+        Get lightweight summary of all strategies with backtest metrics (fast loading)
         
         GET /api/strategies/summary/
         """
@@ -173,7 +173,7 @@ class StrategyViewSet(viewsets.ModelViewSet):
             'backtests'
         ).select_related('user')
         
-        serializer = StrategyListSerializer(strategies, many=True)
+        serializer = StrategySummarySerializer(strategies, many=True)
         return Response(serializer.data)
 
 

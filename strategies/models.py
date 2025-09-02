@@ -69,9 +69,6 @@ class BacktestResult(models.Model):
     # Performance metrics
     total_return = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0'))
     total_return_percent = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0'))
-    sharpe_ratio = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
-    max_drawdown = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0'))
-    max_drawdown_percent = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0'))
     
     # Trade statistics
     total_trades = models.IntegerField(default=0)
@@ -84,6 +81,22 @@ class BacktestResult(models.Model):
     avg_loss = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
     largest_win = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
     largest_loss = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    
+    # Risk metrics
+    sharpe_ratio = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    sortino_ratio = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    calmar_ratio = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    volatility = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    max_drawdown = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0'))
+    max_drawdown_percent = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0'))
+    recovery_factor = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
+    
+    # Trading metrics
+    max_consecutive_wins = models.IntegerField(null=True, blank=True)
+    max_consecutive_losses = models.IntegerField(null=True, blank=True)
+    avg_trade_duration = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    trades_per_month = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    expectancy = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Rating and summary
     rating = models.CharField(max_length=20, default='Poor', 

@@ -11,6 +11,9 @@ import time
 
 from market_data.parquet_service import ParquetDataService
 from .models import Strategy, BacktestResult, Trade
+from .metrics_calculator import (
+    calculate_all_metrics, calculate_strategy_rating, get_rating_color
+)
 
 
 class BacktestEngine:
@@ -150,15 +153,15 @@ class BacktestEngine:
                     # Create trade record
                     trade_data = {
                         'action': current_position['action'],
-                        'entry_price': Decimal(str(current_position['entry_price'])),
-                        'exit_price': Decimal(str(exit_price)),
+                        'entry_price': current_position['entry_price'],
+                        'exit_price': exit_price,
                         'entry_date': current_position['entry_date'],
                         'exit_date': current_date,
                         'quantity': current_position['quantity'],
-                        'pnl': Decimal(str(trade_pnl['gross_pnl'])),
-                        'commission': Decimal(str(commission)),
-                        'slippage': Decimal(str(slippage)),
-                        'net_pnl': Decimal(str(trade_pnl['net_pnl'])),
+                        'pnl': trade_pnl['gross_pnl'],
+                        'commission': float(commission),
+                        'slippage': float(slippage),
+                        'net_pnl': trade_pnl['net_pnl'],
                         'reason': exit_reason,
                         'duration': int((current_date - current_position['entry_date']).total_seconds() * 1000)
                     }
@@ -166,7 +169,7 @@ class BacktestEngine:
                     trades.append(trade_data)
                     
                     # Update portfolio value
-                    portfolio_value += trade_pnl['net_pnl']
+                    portfolio_value += float(trade_pnl['net_pnl'])
                     
                     # Update drawdown tracking
                     if portfolio_value > peak_value:
@@ -178,9 +181,9 @@ class BacktestEngine:
                     
                     current_position = None
         
-        # Calculate performance metrics
+        # Calculate performance metrics using comprehensive calculator
         performance = self._calculate_performance_metrics(
-            trades, initial_capital, portfolio_value, max_drawdown
+            trades, initial_capital, df['date'].min(), df['date'].max()
         )
         
         return trades, performance
@@ -312,77 +315,75 @@ class BacktestEngine:
         }
     
     def _calculate_performance_metrics(self, trades: List[Dict], initial_capital: Decimal,
-                                     final_value: float, max_drawdown: float) -> Dict:
+                                     start_date: datetime, end_date: datetime) -> Dict:
         """
-        Calculate performance metrics
+        Calculate comprehensive performance metrics using the new metrics calculator
         
         Args:
             trades: List of trade data
             initial_capital: Initial capital
-            final_value: Final portfolio value
-            max_drawdown: Maximum drawdown
+            start_date: Backtest start date
+            end_date: Backtest end date
         
         Returns:
-            Dictionary with performance metrics
+            Dictionary with all performance metrics
         """
         if not trades:
             return self._get_empty_performance_metrics()
         
-        # Basic metrics
-        total_return = float(final_value - float(initial_capital))
-        total_return_percent = (total_return / float(initial_capital)) * 100
-        
-        # Trade statistics
-        total_trades = len(trades)
-        winning_trades = sum(1 for trade in trades if trade['net_pnl'] > 0)
-        losing_trades = total_trades - winning_trades
-        win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0
-        
-        # P&L statistics
-        winning_pnls = [trade['net_pnl'] for trade in trades if trade['net_pnl'] > 0]
-        losing_pnls = [trade['net_pnl'] for trade in trades if trade['net_pnl'] < 0]
-        
-        avg_win = sum(winning_pnls) / len(winning_pnls) if winning_pnls else 0
-        avg_loss = sum(losing_pnls) / len(losing_pnls) if losing_pnls else 0
-        largest_win = max(winning_pnls) if winning_pnls else 0
-        largest_loss = min(losing_pnls) if losing_pnls else 0
-        
-        # Profit factor
-        gross_profit = sum(winning_pnls) if winning_pnls else 0
-        gross_loss = abs(sum(losing_pnls)) if losing_pnls else 0
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
-        
-        # Sharpe ratio (simplified)
-        if len(trades) > 1:
-            returns = [float(trade['net_pnl']) / float(initial_capital) for trade in trades]
-            sharpe_ratio = np.mean(returns) / np.std(returns) * np.sqrt(252) if np.std(returns) > 0 else 0
-        else:
-            sharpe_ratio = 0
-        
-        # Rating
-        rating, rating_color, summary = self._calculate_rating(
-            total_return_percent, win_rate, profit_factor, max_drawdown
+        # Use the comprehensive metrics calculator
+        metrics = calculate_all_metrics(
+            trades_data=trades,
+            initial_capital=float(initial_capital),
+            start_date=start_date,
+            end_date=end_date
         )
         
+        # Calculate rating and summary
+        rating = calculate_strategy_rating(metrics)
+        rating_color = get_rating_color(rating)
+        summary = self._generate_summary_description(metrics, rating)
+        
+        # Convert to Decimal for database storage
         return {
-            'total_return': Decimal(str(total_return)),
-            'total_return_percent': Decimal(str(total_return_percent)),
-            'sharpe_ratio': Decimal(str(sharpe_ratio)),
-            'max_drawdown': Decimal(str(max_drawdown * float(initial_capital))),
-            'max_drawdown_percent': Decimal(str(max_drawdown * 100)),
-            'total_trades': total_trades,
-            'winning_trades': winning_trades,
-            'losing_trades': losing_trades,
-            'win_rate': Decimal(str(win_rate)),
-            'profit_factor': Decimal(str(profit_factor)),
-            'avg_win': Decimal(str(avg_win)),
-            'avg_loss': Decimal(str(avg_loss)),
-            'largest_win': Decimal(str(largest_win)),
-            'largest_loss': Decimal(str(largest_loss)),
+            'total_return': Decimal(str(metrics['total_return'])),
+            'total_return_percent': Decimal(str(metrics['total_return_percent'])),
+            'total_trades': metrics['total_trades'],
+            'winning_trades': metrics['winning_trades'],
+            'losing_trades': metrics['losing_trades'],
+            'win_rate': Decimal(str(metrics['win_rate'])),
+            'profit_factor': Decimal(str(metrics['profit_factor'])),
+            'avg_win': Decimal(str(metrics['avg_win'])),
+            'avg_loss': Decimal(str(metrics['avg_loss'])),
+            'largest_win': Decimal(str(metrics['largest_win'])),
+            'largest_loss': Decimal(str(metrics['largest_loss'])),
+            'sharpe_ratio': Decimal(str(metrics['sharpe_ratio'])) if metrics['sharpe_ratio'] is not None else None,
+            'sortino_ratio': Decimal(str(metrics['sortino_ratio'])) if metrics['sortino_ratio'] is not None else None,
+            'calmar_ratio': Decimal(str(metrics['calmar_ratio'])) if metrics['calmar_ratio'] is not None else None,
+            'volatility': Decimal(str(metrics['volatility'])) if metrics['volatility'] is not None else None,
+            'max_drawdown': Decimal(str(metrics['max_drawdown'])),
+            'max_drawdown_percent': Decimal(str(metrics['max_drawdown_percent'])),
+            'recovery_factor': Decimal(str(metrics['recovery_factor'])) if metrics['recovery_factor'] is not None else None,
+            'max_consecutive_wins': metrics['max_consecutive_wins'],
+            'max_consecutive_losses': metrics['max_consecutive_losses'],
+            'avg_trade_duration': Decimal(str(metrics['avg_trade_duration'])) if metrics['avg_trade_duration'] is not None else None,
+            'trades_per_month': Decimal(str(metrics['trades_per_month'])) if metrics['trades_per_month'] is not None else None,
+            'expectancy': Decimal(str(metrics['expectancy'])) if metrics['expectancy'] is not None else None,
             'rating': rating,
             'rating_color': rating_color,
             'summary_description': summary
         }
+    
+    def _generate_summary_description(self, metrics: Dict, rating: str) -> str:
+        """Generate a summary description based on metrics and rating"""
+        descriptions = {
+            'Excellent': f"Outstanding performance with {metrics['total_return_percent']:.1f}% return and {metrics['win_rate']:.1f}% win rate",
+            'Very Good': f"Strong performance with {metrics['total_return_percent']:.1f}% return and good risk management",
+            'Good': f"Solid performance with {metrics['total_return_percent']:.1f}% return and {metrics['win_rate']:.1f}% win rate",
+            'Fair': f"Moderate performance with {metrics['total_return_percent']:.1f}% return, needs optimization",
+            'Poor': f"Poor performance with {metrics['total_return_percent']:.1f}% return and significant risk"
+        }
+        return descriptions.get(rating, "Performance analysis completed")
     
     def _calculate_rating(self, total_return_percent: float, win_rate: float,
                          profit_factor: float, max_drawdown: float) -> Tuple[str, str, str]:
@@ -443,9 +444,6 @@ class BacktestEngine:
         return {
             'total_return': Decimal('0'),
             'total_return_percent': Decimal('0'),
-            'sharpe_ratio': Decimal('0'),
-            'max_drawdown': Decimal('0'),
-            'max_drawdown_percent': Decimal('0'),
             'total_trades': 0,
             'winning_trades': 0,
             'losing_trades': 0,
@@ -455,6 +453,18 @@ class BacktestEngine:
             'avg_loss': Decimal('0'),
             'largest_win': Decimal('0'),
             'largest_loss': Decimal('0'),
+            'sharpe_ratio': None,
+            'sortino_ratio': None,
+            'calmar_ratio': None,
+            'volatility': None,
+            'max_drawdown': Decimal('0'),
+            'max_drawdown_percent': Decimal('0'),
+            'recovery_factor': None,
+            'max_consecutive_wins': 0,
+            'max_consecutive_losses': 0,
+            'avg_trade_duration': None,
+            'trades_per_month': None,
+            'expectancy': None,
             'rating': 'Poor',
             'rating_color': '#e74c3c',
             'summary_description': 'No trades executed during backtest period'
