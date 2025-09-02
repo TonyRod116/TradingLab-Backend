@@ -35,6 +35,10 @@ class Strategy(models.Model):
                                       choices=[('percentage', 'Percentage'), ('points', 'Points')])
     take_profit_value = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('2.0'))
     
+    # Capital settings
+    initial_capital = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('10000'),
+                                        help_text='Initial capital for backtesting')
+    
     # Status
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

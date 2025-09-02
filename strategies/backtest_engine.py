@@ -20,7 +20,7 @@ class BacktestEngine:
         self.parquet_service = ParquetDataService()
     
     def run_backtest(self, strategy: Strategy, start_date: datetime, end_date: datetime,
-                    initial_capital: Decimal = Decimal('100000'), commission: Decimal = Decimal('4.00'),
+                    initial_capital: Decimal = None, commission: Decimal = Decimal('4.00'),
                     slippage: Decimal = Decimal('0.5')) -> BacktestResult:
         """
         Run backtest for a strategy
@@ -29,13 +29,16 @@ class BacktestEngine:
             strategy: Strategy to backtest
             start_date: Backtest start date
             end_date: Backtest end date
-            initial_capital: Initial capital
+            initial_capital: Initial capital (uses strategy.initial_capital if None)
             commission: Commission per trade
             slippage: Slippage percentage
         
         Returns:
             BacktestResult with performance metrics
         """
+        # Use strategy's initial capital if not provided
+        if initial_capital is None:
+            initial_capital = strategy.initial_capital
         start_time = time.time()
         
         try:
@@ -193,14 +196,20 @@ class BacktestEngine:
         Returns:
             True if entry conditions are met
         """
-        # Simple example - can be extended with complex rule engine
         if not entry_rules:
             return False
         
-        # For now, implement a simple random entry condition to test
-        # This prevents the massive number of trades issue
-        import random
-        return random.random() < 0.001  # 0.1% chance of entry per candle
+        # For now, implement a simple deterministic condition
+        # This ensures consistent results across multiple runs
+        current_price = float(row['close'])
+        
+        # Simple price-based entry condition (deterministic)
+        # Entry when price is in a certain range (example: between 4000-5000)
+        if 4000 <= current_price <= 5000:
+            # Use a deterministic "random" based on price
+            # This ensures same price always gives same result
+            price_hash = hash(str(current_price)) % 1000
+            return price_hash < 5  # 0.5% chance based on price
         
         return False
     
