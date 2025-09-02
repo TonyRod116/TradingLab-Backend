@@ -90,10 +90,14 @@ class ParquetDataService:
             
             # Apply date filters
             if start_date:
-                df = df[df['date'] >= start_date]
+                # Convert to pandas Timestamp for comparison
+                start_ts = pd.Timestamp(start_date)
+                df = df[df['date'] >= start_ts]
             
             if end_date:
-                df = df[df['date'] <= end_date]
+                # Convert to pandas Timestamp for comparison
+                end_ts = pd.Timestamp(end_date)
+                df = df[df['date'] <= end_ts]
             
             # Apply limit
             if limit:
