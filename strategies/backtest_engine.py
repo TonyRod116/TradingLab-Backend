@@ -24,7 +24,7 @@ class BacktestEngine:
     
     def run_backtest(self, strategy: Strategy, start_date: datetime, end_date: datetime,
                     initial_capital: Decimal = None, commission: Decimal = Decimal('4.00'),
-                    slippage: Decimal = Decimal('0.5')) -> BacktestResult:
+                    slippage: Decimal = Decimal('0.5'), chunk_size: int = 10000) -> BacktestResult:
         """
         Run backtest for a strategy
         
@@ -61,9 +61,9 @@ class BacktestEngine:
                 strategy.symbol, strategy.timeframe
             ) else 'database'
             
-            # Run backtest simulation
-            trades, performance = self._simulate_strategy(
-                df, strategy, initial_capital, commission, slippage
+            # Run backtest simulation with chunking for large datasets
+            trades, performance = self._simulate_strategy_optimized(
+                df, strategy, initial_capital, commission, slippage, chunk_size
             )
             
             # Calculate execution time
@@ -83,14 +83,185 @@ class BacktestEngine:
                 **performance
             )
             
-            # Save individual trades
-            for trade_data in trades:
-                Trade.objects.create(backtest=backtest_result, **trade_data)
+            # Save trades in bulk for better performance
+            if trades:
+                trade_objects = [
+                    Trade(backtest=backtest_result, **trade_data) 
+                    for trade_data in trades
+                ]
+                Trade.objects.bulk_create(trade_objects)
             
             return backtest_result
             
         except Exception as e:
             raise Exception(f"Backtest failed: {str(e)}")
+    
+    def _simulate_strategy_optimized(self, df: pd.DataFrame, strategy: Strategy,
+                                   initial_capital: Decimal, commission: Decimal,
+                                   slippage: Decimal, chunk_size: int = 10000) -> Tuple[List[Dict], Dict]:
+        """
+        Optimized strategy simulation using vectorized operations
+        
+        Args:
+            df: Market data DataFrame
+            strategy: Strategy to simulate
+            initial_capital: Initial capital
+            commission: Commission per trade
+            slippage: Slippage percentage
+            chunk_size: Size of chunks for processing large datasets
+        
+        Returns:
+            Tuple of (trades_list, performance_metrics)
+        """
+        trades = []
+        portfolio_value = float(initial_capital)
+        current_position = None
+        peak_value = portfolio_value
+        max_drawdown = 0
+        
+        # Process data in chunks for large datasets
+        total_rows = len(df)
+        if total_rows > chunk_size:
+            # Process in chunks
+            for start_idx in range(0, total_rows, chunk_size):
+                end_idx = min(start_idx + chunk_size, total_rows)
+                chunk_df = df.iloc[start_idx:end_idx]
+                
+                chunk_trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
+                    chunk_df, strategy, portfolio_value, current_position, 
+                    peak_value, max_drawdown, commission, slippage
+                )
+                trades.extend(chunk_trades)
+        else:
+            # Process entire dataset at once
+            trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
+                df, strategy, portfolio_value, current_position, 
+                peak_value, max_drawdown, commission, slippage
+            )
+        
+        # Calculate final performance metrics
+        performance = self._calculate_performance_metrics(trades, initial_capital, portfolio_value, max_drawdown)
+        
+        return trades, performance
+    
+    def _process_chunk(self, chunk_df: pd.DataFrame, strategy: Strategy, 
+                      portfolio_value: float, current_position: Optional[Dict],
+                      peak_value: float, max_drawdown: float, commission: Decimal,
+                      slippage: Decimal) -> Tuple[List[Dict], float, Optional[Dict], float, float]:
+        """
+        Process a chunk of data efficiently
+        """
+        trades = []
+        
+        # Convert to list for iteration (more efficient than iterrows)
+        data_list = chunk_df.to_dict('records')
+        
+        for row in data_list:
+            current_price = float(row['close'])
+            current_date = row['date']
+            
+            # Check for entry signals
+            if current_position is None:
+                if self._check_entry_conditions(row, strategy.entry_rules):
+                    # Enter position
+                    entry_price = self._apply_slippage(current_price, slippage, 'buy')
+                    current_position = {
+                        'action': 'buy',
+                        'entry_price': entry_price,
+                        'entry_date': current_date,
+                        'quantity': 1
+                    }
+            
+            # Check for exit signals
+            elif current_position is not None:
+                exit_reason = self._check_exit_conditions(
+                    row, current_position, strategy.exit_rules,
+                    strategy.stop_loss_type, strategy.stop_loss_value,
+                    strategy.take_profit_type, strategy.take_profit_value
+                )
+                
+                if exit_reason:
+                    # Exit position
+                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
+                    
+                    # Calculate trade metrics
+                    trade_duration = (current_date - current_position['entry_date']).total_seconds() * 1000
+                    pnl = (exit_price - current_position['entry_price']) * current_position['quantity']
+                    trade_commission = float(commission)
+                    trade_slippage = abs(exit_price - current_price) * float(slippage) / 100
+                    net_pnl = pnl - trade_commission - trade_slippage
+                    
+                    # Create trade record
+                    trade_data = {
+                        'action': current_position['action'],
+                        'entry_price': current_position['entry_price'],
+                        'exit_price': exit_price,
+                        'entry_date': current_position['entry_date'],
+                        'exit_date': current_date,
+                        'quantity': current_position['quantity'],
+                        'pnl': pnl,
+                        'commission': trade_commission,
+                        'slippage': trade_slippage,
+                        'net_pnl': net_pnl,
+                        'reason': exit_reason,
+                        'duration': int(trade_duration)
+                    }
+                    trades.append(trade_data)
+                    
+                    # Update portfolio value
+                    portfolio_value += net_pnl
+                    
+                    # Update drawdown tracking
+                    if portfolio_value > peak_value:
+                        peak_value = portfolio_value
+                    else:
+                        current_drawdown = (peak_value - portfolio_value) / peak_value
+                        if current_drawdown > max_drawdown:
+                            max_drawdown = current_drawdown
+                    
+                    # Reset position
+                    current_position = None
+        
+        return trades, portfolio_value, current_position, peak_value, max_drawdown
+    
+    def _calculate_performance_metrics(self, trades: List[Dict], initial_capital: Decimal, 
+                                     final_value: float, max_drawdown: float) -> Dict:
+        """
+        Calculate performance metrics efficiently
+        """
+        if not trades:
+            return {
+                'total_return': Decimal('0'),
+                'total_return_percent': Decimal('0'),
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'win_rate': Decimal('0'),
+                'profit_factor': Decimal('0'),
+                'avg_win': Decimal('0'),
+                'avg_loss': Decimal('0'),
+                'largest_win': Decimal('0'),
+                'largest_loss': Decimal('0'),
+                'max_drawdown': Decimal('0'),
+                'max_drawdown_percent': Decimal('0'),
+                'sharpe_ratio': None,
+                'sortino_ratio': None,
+                'calmar_ratio': None,
+                'volatility': None,
+                'recovery_factor': None,
+                'max_consecutive_wins': 0,
+                'max_consecutive_losses': 0,
+                'avg_trade_duration': None,
+                'trades_per_month': None,
+                'expectancy': None,
+                'rating': 'Poor',
+                'rating_color': '#ff6b6b',
+                'summary_description': 'No trades executed'
+            }
+        
+        # Use the existing metrics calculator for consistency
+        return calculate_all_metrics(trades, float(initial_capital), 
+                                   trades[0]['entry_date'], trades[-1]['exit_date'])
     
     def _simulate_strategy(self, df: pd.DataFrame, strategy: Strategy,
                           initial_capital: Decimal, commission: Decimal,

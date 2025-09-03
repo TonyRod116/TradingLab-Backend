@@ -8,8 +8,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import datetime, timedelta
 from decimal import Decimal
+import threading
+import uuid
 
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .serializers import (
@@ -49,9 +52,10 @@ class StrategyViewSet(viewsets.ModelViewSet):
                 'backtests'
             ).select_related('user')
         else:
-            # For detail view, prefetch all backtests and trades
+            # For detail view, prefetch all backtests and trades with optimized queries
             queryset = queryset.prefetch_related(
-                'backtests__trades'
+                'backtests__trades',
+                'backtests__equity_curve'
             ).select_related('user')
         
         return queryset
@@ -62,7 +66,7 @@ class StrategyViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def backtest(self, request, pk=None):
         """
-        Run backtest for a strategy
+        Run backtest for a strategy (synchronous)
         
         POST /api/strategies/{id}/backtest/
         """
@@ -129,6 +133,118 @@ class StrategyViewSet(viewsets.ModelViewSet):
                 {'error': f'Backtest failed: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=['post'])
+    def backtest_async(self, request, pk=None):
+        """
+        Run backtest for a strategy asynchronously
+        
+        POST /api/strategies/{id}/backtest_async/
+        """
+        strategy = self.get_object()
+        
+        # Validate request data
+        serializer = BacktestRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        
+        # Store task status in cache
+        cache.set(f"backtest_task_{task_id}", {
+            'status': 'pending',
+            'progress': 0,
+            'message': 'Starting backtest...',
+            'strategy_id': strategy.id,
+            'user_id': request.user.id,
+            'created_at': timezone.now().isoformat()
+        }, timeout=3600)  # 1 hour timeout
+        
+        # Start backtest in background thread
+        def run_backtest():
+            try:
+                # Update status
+                cache.set(f"backtest_task_{task_id}", {
+                    'status': 'running',
+                    'progress': 10,
+                    'message': 'Loading market data...',
+                    'strategy_id': strategy.id,
+                    'user_id': request.user.id,
+                    'created_at': cache.get(f"backtest_task_{task_id}")['created_at']
+                }, timeout=3600)
+                
+                # Use strategy's initial capital if not provided in request
+                initial_capital = serializer.validated_data.get('initial_capital')
+                if initial_capital is None:
+                    initial_capital = strategy.initial_capital
+                
+                # Run backtest
+                backtest_engine = BacktestEngine()
+                backtest_result = backtest_engine.run_backtest(
+                    strategy=strategy,
+                    start_date=serializer.validated_data['start_date'],
+                    end_date=serializer.validated_data['end_date'],
+                    initial_capital=initial_capital,
+                    commission=serializer.validated_data['commission'],
+                    slippage=serializer.validated_data['slippage']
+                )
+                
+                # Update status to completed
+                cache.set(f"backtest_task_{task_id}", {
+                    'status': 'completed',
+                    'progress': 100,
+                    'message': 'Backtest completed successfully',
+                    'strategy_id': strategy.id,
+                    'user_id': request.user.id,
+                    'backtest_id': backtest_result.id,
+                    'created_at': cache.get(f"backtest_task_{task_id}")['created_at'],
+                    'completed_at': timezone.now().isoformat()
+                }, timeout=3600)
+                
+            except Exception as e:
+                # Update status to failed
+                cache.set(f"backtest_task_{task_id}", {
+                    'status': 'failed',
+                    'progress': 0,
+                    'message': f'Backtest failed: {str(e)}',
+                    'strategy_id': strategy.id,
+                    'user_id': request.user.id,
+                    'created_at': cache.get(f"backtest_task_{task_id}")['created_at'],
+                    'failed_at': timezone.now().isoformat()
+                }, timeout=3600)
+        
+        # Start background thread
+        thread = threading.Thread(target=run_backtest)
+        thread.daemon = True
+        thread.start()
+        
+        return Response({
+            'task_id': task_id,
+            'status': 'pending',
+            'message': 'Backtest started in background'
+        }, status=status.HTTP_202_ACCEPTED)
+    
+    @action(detail=False, methods=['get'])
+    def backtest_status(self, request):
+        """
+        Get backtest task status
+        
+        GET /api/strategies/backtest_status/?task_id=<task_id>
+        """
+        task_id = request.query_params.get('task_id')
+        if not task_id:
+            return Response({'error': 'task_id parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        task_data = cache.get(f"backtest_task_{task_id}")
+        if not task_data:
+            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user owns this task
+        if task_data.get('user_id') != request.user.id:
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        
+        return Response(task_data)
     
     @action(detail=True, methods=['get'])
     def backtests(self, request, pk=None):

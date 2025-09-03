@@ -26,7 +26,7 @@ class ParquetDataService:
         """
         self.data_dir = data_dir or getattr(settings, 'DATA_DIR', 'data')
         self.aggregator = TimeframeAggregator(data_dir=self.data_dir)
-        self.cache_timeout = 300  # 5 minutes cache
+        self.cache_timeout = 1800  # 30 minutes cache for better performance
     
     def get_candles(self, symbol: str, timeframe: str, 
                    start_date: datetime = None, end_date: datetime = None,
