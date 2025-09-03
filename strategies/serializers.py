@@ -4,7 +4,17 @@ Serializers for trading strategies and backtesting
 
 from rest_framework import serializers
 from decimal import Decimal
-from .models import Strategy, BacktestResult, Trade
+from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
+
+
+class EquityCurvePointSerializer(serializers.ModelSerializer):
+    """Serializer for equity curve points"""
+    
+    class Meta:
+        model = EquityCurvePoint
+        fields = [
+            'timestamp', 'equity_value', 'drawdown', 'trade'
+        ]
 
 
 class TradeSerializer(serializers.ModelSerializer):
@@ -22,6 +32,7 @@ class BacktestResultSerializer(serializers.ModelSerializer):
     """Serializer for backtest results"""
     
     trades = TradeSerializer(many=True, read_only=True)
+    equity_curve = EquityCurvePointSerializer(many=True, read_only=True)
     
     class Meta:
         model = BacktestResult
@@ -34,7 +45,8 @@ class BacktestResultSerializer(serializers.ModelSerializer):
             'max_drawdown', 'max_drawdown_percent', 'recovery_factor',
             'max_consecutive_wins', 'max_consecutive_losses', 'avg_trade_duration',
             'trades_per_month', 'expectancy', 'rating', 'rating_color', 
-            'summary_description', 'execution_time', 'data_source', 'created_at', 'trades'
+            'summary_description', 'execution_time', 'data_source', 'created_at', 
+            'trades', 'equity_curve'
         ]
 
 

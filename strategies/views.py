@@ -11,10 +11,10 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .models import Strategy, BacktestResult, Trade
+from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .serializers import (
     StrategySerializer, StrategyListSerializer, StrategySummarySerializer, BacktestResultSerializer, TradeSerializer,
-    BacktestRequestSerializer, BacktestResponseSerializer
+    BacktestRequestSerializer, BacktestResponseSerializer, EquityCurvePointSerializer
 )
 from .backtest_engine import BacktestEngine
 
@@ -231,6 +231,19 @@ class BacktestResultViewSet(viewsets.ReadOnlyModelViewSet):
         }
         
         return Response(summary)
+    
+    @action(detail=True, methods=['get'])
+    def equity_curve(self, request, pk=None):
+        """
+        Get equity curve data for charting
+        
+        GET /api/backtest-results/{id}/equity_curve/
+        """
+        backtest_result = self.get_object()
+        equity_points = backtest_result.equity_curve.all()
+        
+        serializer = EquityCurvePointSerializer(equity_points, many=True)
+        return Response(serializer.data)
 
 
 class TradeViewSet(viewsets.ReadOnlyModelViewSet):

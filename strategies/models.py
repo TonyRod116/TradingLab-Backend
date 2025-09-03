@@ -162,3 +162,27 @@ class Trade(models.Model):
     @property
     def is_losing(self):
         return self.net_pnl < 0
+
+
+class EquityCurvePoint(models.Model):
+    """Individual point in the equity curve for charting"""
+    
+    backtest = models.ForeignKey(BacktestResult, on_delete=models.CASCADE, related_name='equity_curve')
+    
+    # Time and value
+    timestamp = models.DateTimeField(help_text='Point timestamp')
+    equity_value = models.DecimalField(max_digits=15, decimal_places=2, help_text='Portfolio value at this point')
+    drawdown = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0'), help_text='Drawdown at this point')
+    
+    # Trade context (if this point represents a trade)
+    trade = models.ForeignKey(Trade, on_delete=models.SET_NULL, null=True, blank=True, related_name='equity_points')
+    
+    class Meta:
+        db_table = 'equity_curve_points'
+        ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['backtest', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.timestamp.strftime('%Y-%m-%d %H:%M')} - ${self.equity_value}"
