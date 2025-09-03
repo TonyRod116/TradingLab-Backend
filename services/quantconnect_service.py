@@ -4,7 +4,7 @@ import time
 import requests
 import json
 from typing import Dict, Any, Optional
-from quantconnect_parser import QuantConnectNaturalLanguageParser
+from .quantconnect_parser import QuantConnectNaturalLanguageParser
 
 
 class QuantConnectService:
