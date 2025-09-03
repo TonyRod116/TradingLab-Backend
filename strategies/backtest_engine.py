@@ -252,6 +252,16 @@ class BacktestEngine:
         elif take_profit_type == 'points':
             if price_change >= float(take_profit_value):
                 return "Take Profit"
+        elif take_profit_type == 'ticks':
+            # 1 tick = 0.25 points for futures
+            tick_value = float(take_profit_value) * 0.25
+            if price_change >= tick_value:
+                return "Take Profit"
+        elif take_profit_type == 'atr':
+            # Use ATR from current row data
+            atr_value = row.get('atr')
+            if atr_value and price_change >= float(take_profit_value) * float(atr_value):
+                return "Take Profit"
         
         # Check stop loss
         if stop_loss_type == 'percentage':
@@ -259,6 +269,16 @@ class BacktestEngine:
                 return "Stop Loss"
         elif stop_loss_type == 'points':
             if price_change <= -float(stop_loss_value):
+                return "Stop Loss"
+        elif stop_loss_type == 'ticks':
+            # 1 tick = 0.25 points for futures
+            tick_value = float(stop_loss_value) * 0.25
+            if price_change <= -tick_value:
+                return "Stop Loss"
+        elif stop_loss_type == 'atr':
+            # Use ATR from current row data
+            atr_value = row.get('atr')
+            if atr_value and price_change <= -float(stop_loss_value) * float(atr_value):
                 return "Stop Loss"
         
         # Check other exit rules

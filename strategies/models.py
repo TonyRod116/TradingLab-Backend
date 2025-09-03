@@ -28,11 +28,11 @@ class Strategy(models.Model):
     
     # Risk management
     stop_loss_type = models.CharField(max_length=20, default='percentage', 
-                                    choices=[('percentage', 'Percentage'), ('points', 'Points')])
+                                    choices=[('percentage', 'Percentage'), ('points', 'Points'), ('ticks', 'Ticks'), ('atr', 'ATR')])
     stop_loss_value = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.5'))
     
     take_profit_type = models.CharField(max_length=20, default='percentage',
-                                      choices=[('percentage', 'Percentage'), ('points', 'Points')])
+                                      choices=[('percentage', 'Percentage'), ('points', 'Points'), ('ticks', 'Ticks'), ('atr', 'ATR')])
     take_profit_value = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('2.0'))
     
     # Capital settings

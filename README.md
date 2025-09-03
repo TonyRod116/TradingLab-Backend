@@ -115,6 +115,26 @@ Execute trading actions:
 }
 ```
 
+## Risk Management Options
+
+The system supports multiple risk management methods for stop loss and take profit:
+
+### Stop Loss & Take Profit Types
+- **Percentage**: Risk as percentage of entry price (e.g., 0.5% = 0.5)
+- **Points**: Risk in price points (e.g., 2.0 points)
+- **Ticks**: Risk in ticks (1 tick = 0.25 points for futures, e.g., 8 ticks = 2.0 points)
+- **ATR**: Risk based on Average True Range multiplier (e.g., 2.0 ATR)
+
+### Example Risk Configurations
+```json
+{
+  "stop_loss_type": "ticks",
+  "stop_loss_value": "8",
+  "take_profit_type": "atr", 
+  "take_profit_value": "2.0"
+}
+```
+
 ### 3. Filter Rules
 Modify or cancel actions:
 ```json
