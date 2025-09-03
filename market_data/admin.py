@@ -174,7 +174,7 @@ class DataImportLogAdmin(admin.ModelAdmin):
         ('Información del Archivo', {
             'fields': ('file_name', 'file_path', 'symbol', 'timeframe')
         }),
-        ('Resultados de la Importación', {
+        ('Import Results', {
             'fields': ('total_rows', 'imported_rows', 'skipped_rows')
         }),
         ('Rango de Fechas', {
@@ -183,7 +183,7 @@ class DataImportLogAdmin(admin.ModelAdmin):
         ('Estado y Errores', {
             'fields': ('status', 'error_message', 'processing_time')
         }),
-        ('Metadatos', {
+        ('Metadata', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         })
@@ -196,25 +196,25 @@ class DataImportLogAdmin(admin.ModelAdmin):
     actions = ['retry_failed_imports', 'clean_old_logs']
     
     def retry_failed_imports(self, request, queryset):
-        """Acción para reintentar importaciones fallidas"""
+        """Action to retry failed imports"""
         failed_imports = queryset.filter(status='failed')
         count = failed_imports.count()
         
         if count == 0:
-            self.message_user(request, "No hay importaciones fallidas para reintentar.")
+            self.message_user(request, "No failed imports to retry.")
             return
         
-        # Aquí podrías implementar la lógica para reintentar
+        # Here you could implement the retry logic
         self.message_user(
             request, 
-            f"Se encontraron {count} importaciones fallidas. "
-            "Implementa la lógica de reintento en el servicio."
+            f"Found {count} failed imports. "
+            "Implement retry logic in the service."
         )
     
     retry_failed_imports.short_description = "Reintentar importaciones fallidas"
     
     def clean_old_logs(self, request, queryset):
-        """Acción para limpiar logs antiguos"""
+        """Action to clean old logs"""
         from datetime import timedelta
         from django.utils import timezone
         
@@ -224,7 +224,7 @@ class DataImportLogAdmin(admin.ModelAdmin):
         count = old_logs.count()
         
         if count == 0:
-            self.message_user(request, "No hay logs antiguos para limpiar.")
+            self.message_user(request, "No old logs to clean.")
             return
         
         old_logs.delete()
