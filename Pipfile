@@ -13,6 +13,8 @@ djangorestframework-simplejwt = "*"
 django-cors-headers = "*"
 pandas = "*"
 pyarrow = "*"
+whitenoise = "*"
+gunicorn = "*"
 
 [dev-packages]
 
