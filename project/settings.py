@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     'indicators',
     'backtests',
     'strategies',
+    'quantconnect',
 ]
 
 REST_FRAMEWORK = {
@@ -215,3 +216,8 @@ if not DEBUG:
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# QuantConnect API Configuration
+QUANTCONNECT_API_URL = env('QUANTCONNECT_API_URL', default='https://www.quantconnect.com/api/v2')
+QUANTCONNECT_USER_ID = env('QUANTCONNECT_USER_ID')
+QUANTCONNECT_ACCESS_TOKEN = env('QUANTCONNECT_ACCESS_TOKEN')

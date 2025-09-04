@@ -1,0 +1,25 @@
+# TradingLab Backend Environment Variables Template
+# Copy this file to .env and fill in your actual values
+
+# Database Configuration (PostgreSQL - Neon)
+PGHOST=ep-falling-butterfly-a2qb7s68-pooler.eu-central-1.aws.neon.tech
+PGDATABASE=TradingLab_DB
+PGUSER=neondb_owner
+PGPASSWORD=npg_BAiojFUh3O7e
+
+# Django Configuration
+SECRET_KEY=kjbvcdasdcsdwc867456cg3uy4dxgr3467rt76tghjiu
+DEBUG=True
+
+# External APIs
+DATABENTO_API_KEY=db-ntPgC6wdSSWsvYQDPvPW3vCHjbmJa
+
+# QuantConnect API Configuration
+# Get these from: https://www.quantconnect.com/account
+QUANTCONNECT_API_URL=https://www.quantconnect.com/api/v2
+QUANTCONNECT_USER_ID=TU_USER_ID_AQUI
+QUANTCONNECT_ACCESS_TOKEN=TU_ACCESS_TOKEN_AQUI
+
+# Deployment URLs (for production)
+DEPLOYED_BACKEND_URL=https://tradelab.herokuapp.com
+DEPLOYED_FRONTEND_URL=https://trading-lab.netlify.app

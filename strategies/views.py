@@ -20,6 +20,8 @@ from .serializers import (
     BacktestRequestSerializer, BacktestResponseSerializer, EquityCurvePointSerializer
 )
 from .backtest_engine import BacktestEngine
+from .schemas import NLToStrategyRequest, NLToStrategyResponse, BacktestRequest, BacktestResponse
+from .services.nl_to_dsl import NLToDSLService
 
 
 class StrategyPagination(PageNumberPagination):
@@ -370,3 +372,173 @@ class TradeViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         return Trade.objects.filter(backtest__user=self.request.user)
+
+
+# New DSL-based views
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+import uuid
+
+
+class NLToStrategyView(APIView):
+    """
+    Convert natural language trading rules to DSL and LEAN code
+    
+    POST /api/nl-to-strategy/
+    """
+    permission_classes = []  # Remove authentication for testing
+    
+    def post(self, request):
+        try:
+            # Validate request
+            request_data = NLToStrategyRequest(**request.data)
+            
+            # Convert to DSL
+            service = NLToDSLService()
+            response = service.convert_to_dsl(
+                text=request_data.text,
+                defaults=request_data.defaults or {}
+            )
+            
+            return Response(response.dict(), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to convert natural language: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class RunBacktestView(APIView):
+    """
+    Run backtest with DSL or LEAN code (stub implementation)
+    
+    POST /api/run-backtest/
+    """
+    permission_classes = []  # Remove authentication for testing
+    
+    def post(self, request):
+        try:
+            # Validate request
+            request_data = BacktestRequest(**request.data)
+            
+            # Generate fake backtest result for now
+            backtest_id = str(uuid.uuid4())
+            
+            # Mock results
+            fake_results = {
+                'total_return': 15.67,
+                'total_return_percent': 15.67,
+                'sharpe_ratio': 1.23,
+                'max_drawdown': -8.45,
+                'max_drawdown_percent': -8.45,
+                'win_rate': 65.0,
+                'profit_factor': 1.89,
+                'total_trades': 45,
+                'winning_trades': 29,
+                'losing_trades': 16,
+                'avg_win': 2.34,
+                'avg_loss': -1.45,
+                'largest_win': 8.90,
+                'largest_loss': -4.20
+            }
+            
+            response = BacktestResponse(
+                success=True,
+                backtest_id=backtest_id,
+                results=fake_results
+            )
+            
+            return Response(response.dict(), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Backtest failed: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+# Frontend integration snippet (commented out)
+"""
+FRONTEND INTEGRATION SNIPPET (React):
+
+import React, { useState } from 'react';
+
+const TradingStrategyConverter = () => {
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/nl-to-strategy/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to convert strategy');
+      }
+
+      const data = await response.json();
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Describe your trading strategy in natural language..."
+          rows={4}
+          cols={50}
+        />
+        <button type="submit" disabled={loading}>
+          {loading ? 'Converting...' : 'Convert to Strategy'}
+        </button>
+      </form>
+
+      {error && <div style={{color: 'red'}}>{error}</div>}
+
+      {result && (
+        <div>
+          <h3>Strategy DSL:</h3>
+          <pre>{JSON.stringify(result.dsl, null, 2)}</pre>
+          
+          <h3>LEAN Code:</h3>
+          <pre>{result.lean_code}</pre>
+          
+          {result.warnings.length > 0 && (
+            <div>
+              <h4>Warnings:</h4>
+              <ul>
+                {result.warnings.map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TradingStrategyConverter;
+"""
