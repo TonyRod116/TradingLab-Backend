@@ -38,6 +38,8 @@ if DEBUG:
 
     CORS_ALLOWED_ORIGINS = [
         "http://localhost:5173", # Local frontend url
+        "http://localhost:5174", # Local frontend url (alternative port)
+        "http://localhost:3000", # Local frontend url (alternative port)
     ]
 
     CSRF_TRUSTED_ORIGINS = [

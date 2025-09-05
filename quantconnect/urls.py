@@ -12,4 +12,5 @@ urlpatterns = [
     path('direct/', views.quantconnect_direct, name='quantconnect_direct'),
     path('monitor/', views.QuantConnectMonitorView.as_view(), name='quantconnect_monitor'),
     path('complete-flow/', views.QuantConnectCompleteFlowView.as_view(), name='quantconnect_complete_flow'),
+    path('check-progress/', views.check_progress, name='check_progress'),
 ]

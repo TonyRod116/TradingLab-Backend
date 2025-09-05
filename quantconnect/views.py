@@ -657,6 +657,151 @@ class QuantConnectCompleteFlowView(APIView):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+def _safe_serialize(obj):
+    """
+    Convierte objetos no serializables a tipos seguros para JSON
+    """
+    import json
+    from decimal import Decimal
+    from datetime import datetime, date
+    import numpy as np
+    
+    try:
+        # Si ya es serializable, devolverlo
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        # Convertir tipos problemáticos
+        if isinstance(obj, Decimal):
+            return float(obj)
+        elif isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, set):
+            return list(obj)
+        elif hasattr(obj, '__dict__'):
+            # Para objetos personalizados, convertir a dict
+            return {k: _safe_serialize(v) for k, v in obj.__dict__.items()}
+        else:
+            return str(obj)
+
+def _parse_quantconnect_statistics(stats_dict):
+    """
+    Parsea las estadísticas de QuantConnect que vienen como strings
+    """
+    parsed_stats = {}
+    
+    for key, value in stats_dict.items():
+        if isinstance(value, str):
+            # Remover caracteres no numéricos excepto punto y signo menos
+            clean_value = value.replace('%', '').replace('$', '').replace(',', '').strip()
+            
+            try:
+                # Intentar convertir a float
+                if clean_value:
+                    parsed_stats[key] = float(clean_value)
+                else:
+                    parsed_stats[key] = 0.0
+            except (ValueError, TypeError):
+                # Si no se puede convertir, mantener como string
+                parsed_stats[key] = value
+        else:
+            parsed_stats[key] = value
+    
+    return parsed_stats
+
+@csrf_exempt
+def check_progress(request):
+    """
+    Check the progress of a QuantConnect backtest
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        project_id = data.get('project_id')
+        backtest_id = data.get('backtest_id')
+        
+        if not project_id or not backtest_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'project_id and backtest_id are required'
+            }, status=400)
+        
+        # Import the service
+        from strategies.services.quantconnect_service import QuantConnectService
+        
+        qc_service = QuantConnectService()
+        result = qc_service.check_backtest_status_direct(int(project_id), backtest_id)
+        
+        if result['success']:
+            # The result already contains the processed data
+            safe_response = {
+                'success': True,
+                'status': result.get('status', 'Unknown'),
+                'progress': float(result.get('progress', 0)) if result.get('progress') is not None else 0.0,
+                'backtestId': backtest_id,
+                'completed': result.get('completed', False),
+                'projectId': int(project_id),
+                'name': f'Backtest {backtest_id}',
+                'error': result.get('error'),
+                'stacktrace': result.get('stacktrace')
+            }
+            
+            # Agregar estadísticas básicas si están disponibles
+            if 'statistics' in result:
+                stats = result['statistics']
+                parsed_stats = _parse_quantconnect_statistics(stats)
+                safe_response['statistics'] = {
+                    'Total Orders': parsed_stats.get('Total Orders', 0),
+                    'Net Profit': parsed_stats.get('Net Profit', 0.0),
+                    'Sharpe Ratio': parsed_stats.get('Sharpe Ratio', 0.0),
+                    'Drawdown': parsed_stats.get('Drawdown', 0.0),
+                    'Win Rate': parsed_stats.get('Win Rate', 0.0),
+                    'Loss Rate': parsed_stats.get('Loss Rate', 0.0),
+                    'Start Equity': parsed_stats.get('Start Equity', 100000.0),
+                    'End Equity': parsed_stats.get('End Equity', 100000.0),
+                    'Profit Factor': parsed_stats.get('Profit Factor', 0.0),
+                    'Winning Trades': parsed_stats.get('Winning Trades', 0),
+                    'Losing Trades': parsed_stats.get('Losing Trades', 0),
+                    'Total Trades': parsed_stats.get('Total Trades', 0)
+                }
+            
+            # Agregar estadísticas de runtime si están disponibles
+            if 'runtimeStatistics' in result:
+                rt_stats = result['runtimeStatistics']
+                parsed_rt_stats = _parse_quantconnect_statistics(rt_stats)
+                safe_response['runtimeStatistics'] = {
+                    'Equity': parsed_rt_stats.get('Equity', 0.0),
+                    'Net Profit': parsed_rt_stats.get('Net Profit', 0.0),
+                    'Return': parsed_rt_stats.get('Return', 0.0),
+                    'Fees': parsed_rt_stats.get('Fees', 0.0)
+                }
+            
+            return JsonResponse(safe_response, safe=False)
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': result.get('error', 'Failed to check backtest status')
+            }, status=400)
+            
+    except Exception as e:
+        import traceback
+        # Log del error completo para debugging
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }, status=500)
+
 # Asignar las vistas a las funciones para compatibilidad con URLs
 parse_natural_language = ParseNaturalLanguageView.as_view()
 get_strategy_templates = StrategyTemplatesView.as_view()
@@ -666,3 +811,4 @@ compile_project = CompileProjectView.as_view()
 read_compilation_result = ReadCompilationResultView.as_view()
 run_backtest = RunBacktestView.as_view()
 quantconnect_direct = QuantConnectDirectAPIView.as_view()
+# check_progress ya está definido como función arriba

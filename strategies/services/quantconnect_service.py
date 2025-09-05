@@ -252,6 +252,10 @@ class QuantConnectService:
             print(f"❌ DEBUG - Exception in check_backtest_status_direct: {e}")
             return {'success': False, 'error': str(e)}
     
+    def check_backtest_status(self, project_id: int, backtest_id: str) -> Dict[str, Any]:
+        """Check backtest status - wrapper for check_backtest_status_direct"""
+        return self.check_backtest_status_direct(project_id, backtest_id)
+    
     def get_backtest_results_direct(self, project_id: int, backtest_id: str) -> Dict[str, Any]:
         """Get backtest results using direct API"""
         try:

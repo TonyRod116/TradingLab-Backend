@@ -56,6 +56,11 @@ class GPTQuantConnectParser:
             # Si falla GPT, devolver código básico
             return self._generate_fallback_code(description, symbol, initial_capital, start_date, end_date, benchmark)
     
+    def _format_date_for_lean(self, date_str: str) -> str:
+        """Formatea una fecha para usar en código LEAN sin ceros iniciales"""
+        year, month, day = date_str.split('-')
+        return f"{year}, {int(month)}, {int(day)}"
+    
     def _create_quantconnect_prompt(self, description: str, symbol: str, initial_capital: int, 
                                   start_date: str, end_date: str, benchmark: str) -> str:
         """Crea el prompt específico para QuantConnect"""
@@ -86,8 +91,8 @@ from AlgorithmImports import *
 class TradingStrategy(QCAlgorithm):
     def Initialize(self):
         # Configuración básica
-        self.SetStartDate({start_date.replace('-', ', ')})
-        self.SetEndDate({end_date.replace('-', ', ')})
+        self.SetStartDate({self._format_date_for_lean(start_date)})
+        self.SetEndDate({self._format_date_for_lean(end_date)})
         self.SetCash({initial_capital})
         self.symbol = self.AddEquity("{symbol}", Resolution.Daily).Symbol
         self.SetBenchmark("{benchmark}")
@@ -124,16 +129,16 @@ IMPORTANTE:
                               start_date: str, end_date: str, benchmark: str) -> str:
         """Genera código básico si GPT falla"""
         
-        start_year, start_month, start_day = start_date.split('-')
-        end_year, end_month, end_day = end_date.split('-')
+        start_formatted = self._format_date_for_lean(start_date)
+        end_formatted = self._format_date_for_lean(end_date)
         
         return f'''from AlgorithmImports import *
 
 class TradingStrategy(QCAlgorithm):
     def Initialize(self):
         # Set start and end dates
-        self.SetStartDate({start_year}, {start_month}, {start_day})
-        self.SetEndDate({end_year}, {end_month}, {end_day})
+        self.SetStartDate({start_formatted})
+        self.SetEndDate({end_formatted})
         self.SetCash({initial_capital})
         
         # Add equity data
