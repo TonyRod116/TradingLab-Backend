@@ -31,6 +31,22 @@ def calculate_all_metrics(trades_data: List[Dict], initial_capital: float,
     # Convert to DataFrame for easier calculations
     df = pd.DataFrame(trades_data)
     
+    # DEBUG: Check for missing net_pnl column and add logging
+    if 'net_pnl' not in df.columns:
+        print("⚠️ MetricsCalculator - net_pnl column not found, creating with 0 values")
+        df['net_pnl'] = 0.0
+    else:
+        # Log statistics about net_pnl values
+        zero_pnl = (df['net_pnl'] == 0).sum()
+        total_trades = len(df)
+        if zero_pnl == total_trades:
+            print(f"🚨 CRITICAL: All {total_trades} trades have net_pnl = 0! This indicates a calculation bug.")
+            print(f"🔍 Sample trade data: {df.iloc[0].to_dict() if len(df) > 0 else 'No trades'}")
+        elif zero_pnl > total_trades * 0.8:
+            print(f"⚠️  WARNING: {zero_pnl}/{total_trades} trades have net_pnl = 0 ({zero_pnl/total_trades*100:.1f}%)")
+        else:
+            print(f"🔍 MetricsCalculator - Processing {total_trades} trades, {zero_pnl} with zero P&L")
+    
     # Basic trade statistics
     total_trades = len(df)
     winning_trades = len(df[df['net_pnl'] > 0])
@@ -50,10 +66,17 @@ def calculate_all_metrics(trades_data: List[Dict], initial_capital: float,
     largest_win = float(df['net_pnl'].max())
     largest_loss = float(df['net_pnl'].min())
     
-    # Profit Factor
+    # Profit Factor - FIXED: No more Infinity values
     gross_profit = float(winning_trades_df['net_pnl'].sum()) if len(winning_trades_df) > 0 else 0
     gross_loss = abs(float(losing_trades_df['net_pnl'].sum())) if len(losing_trades_df) > 0 else 0
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
+    
+    # Avoid Infinity - if no losses, profit factor is gross_profit or 0
+    if gross_loss > 0:
+        profit_factor = gross_profit / gross_loss
+    elif gross_profit > 0:
+        profit_factor = gross_profit  # Perfect strategy with no losses
+    else:
+        profit_factor = 0.0  # No profits and no losses
     
     # Calculate equity curve
     equity_curve = initial_capital + df['net_pnl'].cumsum()

@@ -123,8 +123,10 @@ class BacktestEngine:
         # Create rule evaluator for REAL strategy evaluation
         try:
             rule_evaluator = StrategyRuleEvaluator(df)
+            print(f"✅ RuleEvaluator created successfully for {len(df)} data points")
+            print(f"🎯 Strategy rules: Entry={bool(strategy.entry_rules)}, Exit={bool(strategy.exit_rules)}")
         except Exception as e:
-            print(f"Warning: Could not create rule evaluator: {e}")
+            print(f"❌ ERROR: Could not create rule evaluator: {e}")
             rule_evaluator = None
         
         # Process data in chunks for large datasets
@@ -192,6 +194,10 @@ class BacktestEngine:
                 if entry_triggered:
                     # Enter position
                     entry_price = self._apply_slippage(current_price, slippage, 'buy')
+                    
+                    # DEBUG: Log entry details
+                    print(f"🎯 REAL Entry at row {global_row_index}: Price={current_price:.2f}, Entry={entry_price:.2f}")
+                    
                     current_position = {
                         'action': 'buy',
                         'entry_price': entry_price,
@@ -224,12 +230,18 @@ class BacktestEngine:
                     # Exit position
                     exit_price = self._apply_slippage(current_price, slippage, 'sell')
                     
-                    # Calculate trade metrics
+                    # Calculate trade metrics with validation
                     trade_duration = (current_date - current_position['entry_date']).total_seconds() * 1000
                     pnl = (exit_price - current_position['entry_price']) * current_position['quantity']
                     trade_commission = float(commission)
                     trade_slippage = abs(exit_price - current_price) * float(slippage) / 100
                     net_pnl = pnl - trade_commission - trade_slippage
+                    
+                    # DEBUG: Validate trade calculations
+                    if abs(net_pnl) < 0.01 and abs(pnl) < 0.01:  # Essentially zero trade
+                        print(f"⚠️ Zero P&L trade: Entry={current_position['entry_price']:.4f}, Exit={exit_price:.4f}, PnL={pnl:.4f}, Net={net_pnl:.4f}")
+                    elif exit_price < 100 or current_position['entry_price'] < 100:  # Suspicious low prices
+                        print(f"🚨 SUSPICIOUS PRICES: Entry={current_position['entry_price']:.4f}, Exit={exit_price:.4f}, Current={current_price:.4f}")
                     
                     # Create trade record
                     trade_data = {
