@@ -135,7 +135,7 @@ class BacktestEngine:
                 end_idx = min(start_idx + chunk_size, total_rows)
                 chunk_df = df.iloc[start_idx:end_idx]
                 
-                chunk_trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk_with_real_rules(
+                chunk_trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
                     chunk_df, strategy, portfolio_value, current_position, 
                     peak_value, max_drawdown, commission, slippage, 
                     rule_evaluator, start_idx
@@ -143,7 +143,7 @@ class BacktestEngine:
                 trades.extend(chunk_trades)
         else:
             # Process entire dataset at once
-            trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk_with_real_rules(
+            trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
                 df, strategy, portfolio_value, current_position, 
                 peak_value, max_drawdown, commission, slippage,
                 rule_evaluator, 0
@@ -154,13 +154,13 @@ class BacktestEngine:
         
         return trades, performance
     
-    def _process_chunk_with_real_rules(self, chunk_df: pd.DataFrame, strategy: Strategy, 
-                                     portfolio_value: float, current_position: Optional[Dict],
-                                     peak_value: float, max_drawdown: float, commission: Decimal,
-                                     slippage: Decimal, rule_evaluator: Optional[StrategyRuleEvaluator],
-                                     global_start_idx: int = 0) -> Tuple[List[Dict], float, Optional[Dict], float, float]:
+    def _process_chunk(self, chunk_df: pd.DataFrame, strategy: Strategy, 
+                      portfolio_value: float, current_position: Optional[Dict],
+                      peak_value: float, max_drawdown: float, commission: Decimal,
+                      slippage: Decimal, rule_evaluator: Optional[StrategyRuleEvaluator],
+                      global_start_idx: int = 0) -> Tuple[List[Dict], float, Optional[Dict], float, float]:
         """
-        Process a chunk of data with REAL rule evaluation
+        Process a chunk of data with REAL rule evaluation ONLY
         """
         trades = []
         
@@ -185,8 +185,9 @@ class BacktestEngine:
                         print(f"Entry rule evaluation error at row {global_row_index}: {e}")
                         entry_triggered = False
                 else:
-                    # Fallback to old logic if rule evaluator failed
-                    entry_triggered = self._check_entry_conditions(row, strategy.entry_rules)
+                    # No fallback - if rule evaluator fails, no entry
+                    entry_triggered = False
+                    print("ERROR: Rule evaluator failed - no entry will be triggered")
                 
                 if entry_triggered:
                     # Enter position
@@ -262,247 +263,6 @@ class BacktestEngine:
                     current_position = None
         
         return trades, portfolio_value, current_position, peak_value, max_drawdown
-    
-    def _process_chunk(self, chunk_df: pd.DataFrame, strategy: Strategy, 
-                      portfolio_value: float, current_position: Optional[Dict],
-                      peak_value: float, max_drawdown: float, commission: Decimal,
-                      slippage: Decimal) -> Tuple[List[Dict], float, Optional[Dict], float, float]:
-        """
-        Process a chunk of data efficiently
-        """
-        trades = []
-        
-        # Convert to list for iteration (more efficient than iterrows)
-        data_list = chunk_df.to_dict('records')
-        
-        for row in data_list:
-            current_price = float(row['close'])
-            current_date = row['date']
-            
-            # Check for entry signals
-            if current_position is None:
-                if self._check_entry_conditions(row, strategy.entry_rules):
-                    # Enter position
-                    entry_price = self._apply_slippage(current_price, slippage, 'buy')
-                    current_position = {
-                        'action': 'buy',
-                        'entry_price': entry_price,
-                        'entry_date': current_date,
-                        'quantity': 1
-                    }
-            
-            # Check for exit signals
-            elif current_position is not None:
-                exit_reason = self._check_exit_conditions(
-                    row, current_position, strategy.exit_rules,
-                    strategy.stop_loss_type, strategy.stop_loss_value,
-                    strategy.take_profit_type, strategy.take_profit_value
-                )
-                
-                if exit_reason:
-                    # Exit position
-                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
-                    
-                    # Calculate trade metrics
-                    trade_duration = (current_date - current_position['entry_date']).total_seconds() * 1000
-                    pnl = (exit_price - current_position['entry_price']) * current_position['quantity']
-                    trade_commission = float(commission)
-                    trade_slippage = abs(exit_price - current_price) * float(slippage) / 100
-                    net_pnl = pnl - trade_commission - trade_slippage
-                    
-                    # Create trade record
-                    trade_data = {
-                        'action': current_position['action'],
-                        'entry_price': current_position['entry_price'],
-                        'exit_price': exit_price,
-                        'entry_date': current_position['entry_date'],
-                        'exit_date': current_date,
-                        'quantity': current_position['quantity'],
-                        'pnl': pnl,
-                        'commission': trade_commission,
-                        'slippage': trade_slippage,
-                        'net_pnl': net_pnl,
-                        'reason': exit_reason,
-                        'duration': int(trade_duration)
-                    }
-                    trades.append(trade_data)
-                    
-                    # Update portfolio value
-                    portfolio_value += net_pnl
-                    
-                    # Update drawdown tracking
-                    if portfolio_value > peak_value:
-                        peak_value = portfolio_value
-                    else:
-                        current_drawdown = (peak_value - portfolio_value) / peak_value
-                        if current_drawdown > max_drawdown:
-                            max_drawdown = current_drawdown
-                    
-                    # Reset position
-                    current_position = None
-        
-        return trades, portfolio_value, current_position, peak_value, max_drawdown
-    
-    def _calculate_performance_metrics(self, trades: List[Dict], initial_capital: Decimal, 
-                                     final_value: float, max_drawdown: float) -> Dict:
-        """
-        Calculate performance metrics efficiently
-        """
-        if not trades:
-            return {
-                'total_return': Decimal('0'),
-                'total_return_percent': Decimal('0'),
-                'total_trades': 0,
-                'winning_trades': 0,
-                'losing_trades': 0,
-                'win_rate': Decimal('0'),
-                'profit_factor': Decimal('0'),
-                'avg_win': Decimal('0'),
-                'avg_loss': Decimal('0'),
-                'largest_win': Decimal('0'),
-                'largest_loss': Decimal('0'),
-                'max_drawdown': Decimal('0'),
-                'max_drawdown_percent': Decimal('0'),
-                'sharpe_ratio': None,
-                'sortino_ratio': None,
-                'calmar_ratio': None,
-                'volatility': None,
-                'recovery_factor': None,
-                'max_consecutive_wins': 0,
-                'max_consecutive_losses': 0,
-                'avg_trade_duration': None,
-                'trades_per_month': None,
-                'expectancy': None,
-                'rating': 'Poor',
-                'rating_color': '#ff6b6b',
-                'summary_description': 'No trades executed'
-            }
-        
-        # Use the existing metrics calculator for consistency
-        return calculate_all_metrics(trades, float(initial_capital), 
-                                   trades[0]['entry_date'], trades[-1]['exit_date'])
-    
-    def _simulate_strategy(self, df: pd.DataFrame, strategy: Strategy,
-                          initial_capital: Decimal, commission: Decimal,
-                          slippage: Decimal) -> Tuple[List[Dict], Dict]:
-        """
-        Simulate strategy execution
-        
-        Args:
-            df: Market data DataFrame
-            strategy: Strategy to simulate
-            initial_capital: Initial capital
-            commission: Commission per trade
-            slippage: Slippage percentage
-        
-        Returns:
-            Tuple of (trades_list, performance_metrics)
-        """
-        trades = []
-        portfolio_value = float(initial_capital)
-        current_position = None
-        peak_value = portfolio_value
-        max_drawdown = 0
-        
-        # Convert DataFrame to list for iteration
-        data_list = df.to_dict('records')
-        
-        for i, row in enumerate(data_list):
-            current_price = float(row['close'])
-            current_date = row['date']
-            
-            # Check for entry signals
-            if current_position is None:
-                if self._check_entry_conditions(row, strategy.entry_rules):
-                    # Enter position
-                    entry_price = self._apply_slippage(current_price, slippage, 'buy')
-                    current_position = {
-                        'action': 'buy',
-                        'entry_price': entry_price,
-                        'entry_date': current_date,
-                        'quantity': 1
-                    }
-            
-            # Check for exit signals
-            elif current_position is not None:
-                exit_reason = self._check_exit_conditions(
-                    row, current_position, strategy.exit_rules,
-                    strategy.stop_loss_type, strategy.stop_loss_value,
-                    strategy.take_profit_type, strategy.take_profit_value
-                )
-                
-                if exit_reason:
-                    # Exit position
-                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
-                    
-                    # Calculate trade P&L
-                    trade_pnl = self._calculate_trade_pnl(
-                        current_position, exit_price, commission
-                    )
-                    
-                    # Create trade record
-                    trade_data = {
-                        'action': current_position['action'],
-                        'entry_price': current_position['entry_price'],
-                        'exit_price': exit_price,
-                        'entry_date': current_position['entry_date'],
-                        'exit_date': current_date,
-                        'quantity': current_position['quantity'],
-                        'pnl': trade_pnl['gross_pnl'],
-                        'commission': float(commission),
-                        'slippage': float(slippage),
-                        'net_pnl': trade_pnl['net_pnl'],
-                        'reason': exit_reason,
-                        'duration': int((current_date - current_position['entry_date']).total_seconds() * 1000)
-                    }
-                    
-                    trades.append(trade_data)
-                    
-                    # Update portfolio value
-                    portfolio_value += float(trade_pnl['net_pnl'])
-                    
-                    # Update drawdown tracking
-                    if portfolio_value > peak_value:
-                        peak_value = portfolio_value
-                    
-                    current_drawdown = (peak_value - portfolio_value) / peak_value
-                    if current_drawdown > max_drawdown:
-                        max_drawdown = current_drawdown
-                    
-                    current_position = None
-        
-        # Calculate performance metrics using comprehensive calculator
-        performance = self._calculate_performance_metrics(
-            trades, initial_capital, df['date'].min(), df['date'].max()
-        )
-        
-        return trades, performance
-    
-    def _check_entry_conditions(self, row: Dict, entry_rules: Dict) -> bool:
-        """
-        *** DEPRECATED - FALLBACK ONLY ***
-        This function uses FAKE hardcoded logic and should NOT be used.
-        Real rule evaluation is done by StrategyRuleEvaluator.
-        
-        This is only kept as a fallback if the real evaluator fails.
-        """
-        print("WARNING: Using deprecated fake entry conditions - rule evaluator failed!")
-        
-        if not entry_rules:
-            return False
-        
-        # FAKE LOGIC - DO NOT RELY ON THIS
-        current_price = float(row['close'])
-        
-        # Simple price-based entry condition (deterministic)
-        # Entry when price is in a certain range (example: between 4000-5000)
-        if 4000 <= current_price <= 5000:
-            # Use a deterministic "random" based on price
-            # This ensures same price always gives same result
-            price_hash = hash(str(current_price)) % 1000
-            return price_hash < 5  # 0.5% chance based on price
-        
-        return False
     
     def _check_exit_conditions(self, row: Dict, position: Dict, exit_rules: Dict,
                               stop_loss_type: str, stop_loss_value: Decimal,
