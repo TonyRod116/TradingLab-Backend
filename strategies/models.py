@@ -39,6 +39,15 @@ class Strategy(models.Model):
     initial_capital = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('10000'),
                                         help_text='Initial capital for backtesting')
     
+    # QuantConnect integration
+    qc_project_id = models.CharField(max_length=100, blank=True, null=True, help_text='QuantConnect project ID')
+    qc_compile_id = models.CharField(max_length=100, blank=True, null=True, help_text='QuantConnect compile ID')
+    qc_backtest_id = models.CharField(max_length=100, blank=True, null=True, help_text='QuantConnect backtest ID')
+    qc_status = models.CharField(max_length=50, default='Unknown', help_text='QuantConnect backtest status')
+    qc_progress = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0'), help_text='QuantConnect backtest progress %')
+    qc_last_sync = models.DateTimeField(null=True, blank=True, help_text='Last QuantConnect sync timestamp')
+    qc_results = models.JSONField(null=True, blank=True, help_text='QuantConnect backtest results')
+    
     # Status
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

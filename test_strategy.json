@@ -1,0 +1,12 @@
+{
+  "strategy": {
+    "id": 1,
+    "name": "Test Strategy",
+    "lean_code": "from AlgorithmImports import *\n\nclass TestStrategy(QCAlgorithm):\n    def Initialize(self):\n        self.SetStartDate(2023, 1, 1)\n        self.SetEndDate(2023, 12, 31)\n        self.SetCash(100000)\n        self.AddEquity(\"SPY\", Resolution.Daily)\n    \n    def OnData(self, data):\n        if not self.Portfolio.Invested:\n            self.SetHoldings(\"SPY\", 1.0)"
+  },
+  "backtest_params": {
+    "start_date": "2023-01-01",
+    "end_date": "2023-12-31",
+    "initial_capital": 100000
+  }
+}

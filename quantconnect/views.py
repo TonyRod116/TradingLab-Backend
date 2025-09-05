@@ -200,6 +200,463 @@ class RunBacktestView(QuantConnectView):
                 'error': f'Backtest error: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class QuantConnectDirectAPIView(APIView):
+    """Vista para operaciones directas con QuantConnect API"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Endpoint principal para operaciones de QuantConnect"""
+        action = request.data.get('action')
+        
+        if action == 'create_project':
+            return self._create_project(request)
+        elif action == 'create_file':
+            return self._create_file(request)
+        elif action == 'compile_project':
+            return self._compile_project(request)
+        elif action == 'check_compilation':
+            return self._check_compilation(request)
+        elif action == 'run_backtest':
+            return self._run_backtest(request)
+        elif action == 'check_backtest_status':
+            return self._check_backtest_status(request)
+        elif action == 'get_backtest_results':
+            return self._get_backtest_results(request)
+        else:
+            return Response({
+                'success': False,
+                'error': 'Invalid action. Available: create_project, create_file, compile_project, check_compilation, run_backtest, check_backtest_status, get_backtest_results'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _create_project(self, request):
+        """Crear proyecto en QuantConnect"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            name = request.data.get('name', f'Strategy {datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            language = request.data.get('language', 'Py')
+            
+            qc_service = QuantConnectService()
+            result = qc_service.create_project_direct(name, language)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'project_id': result['project_id'],
+                    'name': result['name'],
+                    'language': result['language']
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': result['error']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _create_file(self, request):
+        """Crear archivo en proyecto QuantConnect"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            filename = request.data.get('filename', 'main.py')
+            content = request.data.get('content', '')
+            
+            if not project_id or not content:
+                return Response({
+                    'success': False,
+                    'error': 'project_id and content are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.create_file_direct(project_id, filename, content)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _compile_project(self, request):
+        """Compilar proyecto QuantConnect"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            
+            if not project_id:
+                return Response({
+                    'success': False,
+                    'error': 'project_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.compile_project_direct(project_id)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _check_compilation(self, request):
+        """Verificar estado de compilación"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            compile_id = request.data.get('compile_id')
+            
+            if not project_id or not compile_id:
+                return Response({
+                    'success': False,
+                    'error': 'project_id and compile_id are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.check_compilation_direct(project_id, compile_id)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _run_backtest(self, request):
+        """Ejecutar backtest"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            compile_id = request.data.get('compile_id')
+            backtest_name = request.data.get('backtest_name')
+            
+            if not project_id or not compile_id:
+                return Response({
+                    'success': False,
+                    'error': 'project_id and compile_id are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.run_backtest_direct(project_id, compile_id, backtest_name)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _check_backtest_status(self, request):
+        """Verificar estado del backtest"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            backtest_id = request.data.get('backtest_id')
+            
+            if not project_id or not backtest_id:
+                return Response({
+                    'success': False,
+                    'error': 'project_id and backtest_id are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.check_backtest_status_direct(project_id, backtest_id)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _get_backtest_results(self, request):
+        """Obtener resultados del backtest"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            
+            project_id = request.data.get('project_id')
+            backtest_id = request.data.get('backtest_id')
+            
+            if not project_id or not backtest_id:
+                return Response({
+                    'success': False,
+                    'error': 'project_id and backtest_id are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            result = qc_service.get_backtest_results_direct(project_id, backtest_id)
+            
+            return Response(result)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class QuantConnectMonitorView(APIView):
+    """Vista para monitoreo en tiempo real de QuantConnect"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Monitorear estado de compilación o backtest"""
+        monitor_type = request.GET.get('type')  # 'compilation' o 'backtest'
+        project_id = request.GET.get('project_id')
+        
+        if not project_id:
+            return Response({
+                'success': False,
+                'error': 'project_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            qc_service = QuantConnectService()
+            
+            if monitor_type == 'compilation':
+                compile_id = request.GET.get('compile_id')
+                if not compile_id:
+                    return Response({
+                        'success': False,
+                        'error': 'compile_id is required for compilation monitoring'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                result = qc_service.check_compilation_direct(project_id, compile_id)
+                
+            elif monitor_type == 'backtest':
+                backtest_id = request.GET.get('backtest_id')
+                if not backtest_id:
+                    return Response({
+                        'success': False,
+                        'error': 'backtest_id is required for backtest monitoring'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                result = qc_service.check_backtest_status_direct(project_id, backtest_id)
+                
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'type must be "compilation" or "backtest"'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response(result)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class QuantConnectCompleteFlowView(APIView):
+    """Vista para ejecutar el flujo completo de QuantConnect"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Ejecutar flujo completo: crear proyecto, archivo, compilar y ejecutar backtest"""
+        try:
+            from strategies.services.quantconnect_service import QuantConnectService
+            import time
+            
+            # Obtener parámetros
+            strategy_name = request.data.get('strategy_name', f'Strategy {datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            python_code = request.data.get('python_code', '')
+            backtest_name = request.data.get('backtest_name', f'Backtest {datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            
+            if not python_code:
+                return Response({
+                    'success': False,
+                    'error': 'python_code is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            qc_service = QuantConnectService()
+            results = {
+                'steps': [],
+                'project_id': None,
+                'compile_id': None,
+                'backtest_id': None,
+                'final_results': None
+            }
+            
+            # Paso 1: Crear proyecto
+            project_result = qc_service.create_project_direct(strategy_name)
+            if not project_result['success']:
+                return Response({
+                    'success': False,
+                    'error': f'Failed to create project: {project_result["error"]}',
+                    'results': results
+                })
+            
+            project_id = project_result['project_id']
+            results['project_id'] = project_id
+            results['steps'].append({
+                'step': 'create_project',
+                'success': True,
+                'project_id': project_id
+            })
+            
+            # Paso 2: Crear archivo
+            file_result = qc_service.create_file_direct(project_id, 'main.py', python_code)
+            if not file_result['success']:
+                return Response({
+                    'success': False,
+                    'error': f'Failed to create file: {file_result["error"]}',
+                    'results': results
+                })
+            
+            results['steps'].append({
+                'step': 'create_file',
+                'success': True
+            })
+            
+            # Paso 3: Compilar proyecto
+            compile_result = qc_service.compile_project_direct(project_id)
+            if not compile_result['success']:
+                return Response({
+                    'success': False,
+                    'error': f'Failed to compile project: {compile_result["error"]}',
+                    'results': results
+                })
+            
+            compile_id = compile_result['compile_id']
+            results['compile_id'] = compile_id
+            results['steps'].append({
+                'step': 'compile_project',
+                'success': True,
+                'compile_id': compile_id
+            })
+            
+            # Paso 4: Esperar compilación
+            max_attempts = 30
+            for attempt in range(max_attempts):
+                time.sleep(2)  # Esperar 2 segundos
+                compilation_check = qc_service.check_compilation_direct(project_id, compile_id)
+                
+                if compilation_check['success']:
+                    if compilation_check['completed']:
+                        results['steps'].append({
+                            'step': 'compilation_completed',
+                            'success': True,
+                            'state': compilation_check['state']
+                        })
+                        break
+                    elif compilation_check['failed']:
+                        return Response({
+                            'success': False,
+                            'error': f'Compilation failed: {compilation_check.get("logs", [])}',
+                            'results': results
+                        })
+                    else:
+                        results['steps'].append({
+                            'step': 'compilation_in_progress',
+                            'success': True,
+                            'state': compilation_check['state'],
+                            'attempt': attempt + 1
+                        })
+                else:
+                    return Response({
+                        'success': False,
+                        'error': f'Failed to check compilation: {compilation_check["error"]}',
+                        'results': results
+                    })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Compilation timeout',
+                    'results': results
+                })
+            
+            # Paso 5: Ejecutar backtest
+            backtest_result = qc_service.run_backtest_direct(project_id, compile_id, backtest_name)
+            if not backtest_result['success']:
+                return Response({
+                    'success': False,
+                    'error': f'Failed to run backtest: {backtest_result["error"]}',
+                    'results': results
+                })
+            
+            backtest_id = backtest_result['backtest_id']
+            results['backtest_id'] = backtest_id
+            results['steps'].append({
+                'step': 'backtest_started',
+                'success': True,
+                'backtest_id': backtest_id,
+                'status': backtest_result['status']
+            })
+            
+            # Paso 6: Monitorear backtest
+            max_backtest_attempts = 60  # 10 minutos máximo
+            for attempt in range(max_backtest_attempts):
+                time.sleep(10)  # Esperar 10 segundos
+                backtest_check = qc_service.check_backtest_status_direct(project_id, backtest_id)
+                
+                if backtest_check['success']:
+                    if backtest_check['completed']:
+                        results['steps'].append({
+                            'step': 'backtest_completed',
+                            'success': True,
+                            'status': backtest_check['status'],
+                            'progress': backtest_check['progress']
+                        })
+                        
+                        # Obtener resultados finales
+                        final_results = qc_service.get_backtest_results_direct(project_id, backtest_id)
+                        if final_results['success']:
+                            results['final_results'] = final_results['results']
+                        
+                        return Response({
+                            'success': True,
+                            'message': 'Backtest completed successfully',
+                            'results': results
+                        })
+                        
+                    elif backtest_check['failed']:
+                        return Response({
+                            'success': False,
+                            'error': f'Backtest failed: {backtest_check["status"]}',
+                            'results': results
+                        })
+                    else:
+                        results['steps'].append({
+                            'step': 'backtest_in_progress',
+                            'success': True,
+                            'status': backtest_check['status'],
+                            'progress': backtest_check['progress'],
+                            'attempt': attempt + 1
+                        })
+                else:
+                    return Response({
+                        'success': False,
+                        'error': f'Failed to check backtest status: {backtest_check["error"]}',
+                        'results': results
+                    })
+            
+            return Response({
+                'success': False,
+                'error': 'Backtest timeout',
+                'results': results
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 # Asignar las vistas a las funciones para compatibilidad con URLs
 parse_natural_language = ParseNaturalLanguageView.as_view()
 get_strategy_templates = StrategyTemplatesView.as_view()
@@ -208,3 +665,4 @@ health_check = HealthCheckView.as_view()
 compile_project = CompileProjectView.as_view()
 read_compilation_result = ReadCompilationResultView.as_view()
 run_backtest = RunBacktestView.as_view()
+quantconnect_direct = QuantConnectDirectAPIView.as_view()

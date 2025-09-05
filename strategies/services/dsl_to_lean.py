@@ -9,11 +9,14 @@ class DSLToLeanService:
     Service that converts DSL to executable LEAN (QuantConnect) Python code
     """
     
-    def generate_lean(self, dsl: Dict[str, Any]) -> str:
+    def generate_lean(self, strategy_data: Dict[str, Any]) -> str:
         """
-        Generate complete LEAN algorithm from DSL
+        Generate complete LEAN algorithm from strategy data
         """
         try:
+            # Convert strategy builder format to DSL format
+            dsl = self._convert_strategy_to_dsl(strategy_data)
+            
             code_parts = []
             
             # Header and imports
@@ -36,6 +39,30 @@ class DSLToLeanService:
         except Exception as e:
             logger.error(f"Error generating LEAN code: {e}")
             raise ValueError(f"Failed to generate LEAN code: {str(e)}")
+    
+    def _convert_strategy_to_dsl(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert strategy builder format to DSL format"""
+        rules = strategy_data.get('rules', {})
+        
+        # Default values
+        dsl = {
+            'universe': {
+                'symbols': rules.get('symbols', ['SPY']),
+                'timeframe': rules.get('timeframe', 'daily')
+            },
+            'timeframe': {
+                'start_date': '2023-01-01',
+                'end_date': '2024-01-01'
+            },
+            'entry_rules': rules.get('entry_conditions', []),
+            'exit_rules': rules.get('exit_conditions', []),
+            'positioning': {
+                'initial_capital': 10000,
+                'position_size': 1.0
+            }
+        }
+        
+        return dsl
     
     def _generate_header(self) -> str:
         """Generate imports and class header"""

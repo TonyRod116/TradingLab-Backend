@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import threading
 import uuid
+import time
 
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .serializers import (
@@ -456,6 +457,226 @@ class RunBacktestView(APIView):
             return Response(
                 {'error': f'Backtest failed: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class QuantConnectBacktestView(APIView):
+    """
+    Run backtest in QuantConnect with strategy from Strategy Builder
+    
+    POST /api/strategies/quantconnect-backtest/
+    """
+    permission_classes = []  # Remove authentication for testing
+    
+    def post(self, request):
+        try:
+            # Extract strategy data from request
+            strategy_data = request.data.get('strategy', {})
+            backtest_params = request.data.get('backtest_params', {})
+            
+            # Required fields
+            if not strategy_data:
+                return Response(
+                    {'error': 'Strategy data is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get LEAN code directly from frontend
+            from .services.quantconnect_service import QuantConnectService
+            
+            # Use LEAN code provided by frontend
+            lean_code = strategy_data.get('lean_code', '')
+            
+            if not lean_code:
+                return Response(
+                    {'error': 'LEAN code is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Run real QuantConnect backtest
+            qc_service = QuantConnectService()
+            strategy_name = strategy_data.get('name', 'Strategy from Builder')
+            backtest_name = f"{strategy_name}_{int(time.time())}"
+            
+            # Execute complete backtest workflow
+            result = qc_service.run_complete_backtest(
+                strategy_name=strategy_name,
+                lean_code=lean_code,
+                backtest_name=backtest_name
+            )
+            
+            if not result['success']:
+                return Response(
+                    {'error': f'QuantConnect backtest failed: {result["error"]}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            # Extract results from QuantConnect response
+            qc_results = result['results']
+            statistics = qc_results.get('statistics', {})
+            
+            # Map QuantConnect results to our format
+            backtest_results = {
+                'total_return': float(statistics.get('Total Return', 0)),
+                'total_return_percent': float(statistics.get('Total Return', 0)),
+                'sharpe_ratio': float(statistics.get('Sharpe Ratio', 0)),
+                'max_drawdown': float(statistics.get('Drawdown', 0)),
+                'max_drawdown_percent': float(statistics.get('Drawdown', 0)),
+                'win_rate': float(statistics.get('Win Rate', 0)),
+                'profit_factor': float(statistics.get('Profit Factor', 0)),
+                'total_trades': int(statistics.get('Total Trades', 0)),
+                'winning_trades': int(statistics.get('Win Count', 0)),
+                'losing_trades': int(statistics.get('Loss Count', 0)),
+                'avg_win': float(statistics.get('Average Win', 0)),
+                'avg_loss': float(statistics.get('Average Loss', 0)),
+                'largest_win': float(statistics.get('Largest Win', 0)),
+                'largest_loss': float(statistics.get('Largest Loss', 0)),
+                'volatility': float(statistics.get('Volatility', 0)),
+                'beta': float(statistics.get('Beta', 0)),
+                'alpha': float(statistics.get('Alpha', 0))
+            }
+            
+            project_id = result['project_id']
+            compile_id = result['compile_id']
+            backtest_id = result['backtest_id']
+            
+            # Save QuantConnect IDs to database if strategy_id is provided
+            strategy_id = strategy_data.get('id')
+            if strategy_id:
+                try:
+                    strategy = Strategy.objects.get(id=strategy_id)
+                    strategy.qc_project_id = project_id
+                    strategy.qc_compile_id = compile_id
+                    strategy.qc_backtest_id = backtest_id
+                    strategy.qc_status = 'Completed'
+                    strategy.qc_progress = 100.0
+                    strategy.qc_last_sync = timezone.now()
+                    strategy.qc_results = qc_results
+                    strategy.save()
+                    print(f"💾 Saved QuantConnect IDs to strategy {strategy_id}")
+                except Strategy.DoesNotExist:
+                    print(f"⚠️ Strategy {strategy_id} not found, skipping database save")
+            
+            response_data = {
+                'success': True,
+                'strategy_id': strategy_id,
+                'strategy_name': strategy_data.get('name', 'Strategy from Builder'),
+                'quantconnect': {
+                    'project_id': project_id,
+                    'compile_id': compile_id,
+                    'backtest_id': backtest_id,
+                    'status': 'completed'
+                },
+                'lean_code': lean_code,
+                'backtest_results': backtest_results,
+                'backtest_params': backtest_params,
+                'message': 'Backtest completed successfully in QuantConnect'
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'QuantConnect backtest failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class QuantConnectProgressView(APIView):
+    """
+    Get backtest progress for frontend loading bar
+    
+    GET /api/strategies/quantconnect-progress/?project_id=XXX&backtest_id=XXX
+    """
+    permission_classes = []  # Remove authentication for testing
+    
+    def get(self, request):
+        try:
+            project_id = request.query_params.get('project_id')
+            backtest_id = request.query_params.get('backtest_id')
+            
+            if not project_id or not backtest_id:
+                return Response(
+                    {'error': 'project_id and backtest_id are required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            from .services.quantconnect_service import QuantConnectService
+            
+            qc_service = QuantConnectService()
+            progress_result = qc_service.get_backtest_progress(project_id, backtest_id)
+            
+            if not progress_result['success']:
+                return Response(
+                    {'error': f'Failed to get progress: {progress_result["error"]}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            return Response(progress_result, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Progress check failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class QuantConnectStrategyStatusView(APIView):
+    """
+    Get QuantConnect status for a specific strategy (with database polling)
+    
+    GET /api/strategies/{strategy_id}/qc-status/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, strategy_id):
+        try:
+            from .services.quantconnect_service import QuantConnectService
+            
+            # Check if strategy exists and user has access
+            try:
+                strategy = Strategy.objects.get(id=strategy_id, user=request.user)
+            except Strategy.DoesNotExist:
+                return Response(
+                    {'error': 'Strategy not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Validate QuantConnect IDs
+            if not strategy.qc_project_id or not strategy.qc_backtest_id:
+                return Response({
+                    'status': 'Unknown',
+                    'progress': 0,
+                    'message': 'Missing QuantConnect IDs (project/backtest). Launch a backtest first.',
+                    'errors': ['MISSING_IDS'],
+                    'synced_at': timezone.now().isoformat()
+                }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            
+            try:
+                qc_service = QuantConnectService()
+                status_result = qc_service.poll_strategy_status(strategy_id)
+                
+                # Add cache control headers
+                response = Response(status_result, status=status.HTTP_200_OK)
+                response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+                response['Pragma'] = 'no-cache'
+                response['Expires'] = '0'
+                return response
+                
+            except Exception as qc_error:
+                # QuantConnect unreachable - return 424 Failed Dependency
+                return Response({
+                    'status': 'Unknown',
+                    'progress': 0,
+                    'message': f'QuantConnect unreachable: {str(qc_error)}',
+                    'errors': ['QC_UNREACHABLE'],
+                    'synced_at': timezone.now().isoformat()
+                }, status=status.HTTP_424_FAILED_DEPENDENCY)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Status check failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 

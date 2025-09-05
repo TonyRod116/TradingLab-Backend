@@ -15,6 +15,7 @@ pandas = "*"
 pyarrow = "*"
 whitenoise = "*"
 gunicorn = "*"
+requests = "*"
 
 [dev-packages]
 
