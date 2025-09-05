@@ -85,6 +85,12 @@ class StrategySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    def validate(self, data):
+        """Ensure required fields have default values if not provided"""
+        if 'exit_rules' not in data or data['exit_rules'] is None:
+            data['exit_rules'] = {}
+        return data
+    
     def get_backtest_count(self, obj):
         return obj.backtests.count()
     

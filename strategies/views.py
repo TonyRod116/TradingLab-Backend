@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import threading
 import uuid
+import logging
 
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .serializers import (
@@ -62,6 +63,33 @@ class StrategyViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new strategy with detailed logging"""
+        logger = logging.getLogger(__name__)
+        try:
+            logger.info(f"🔍 StrategyViewSet.create - User: {request.user}")
+            logger.info(f"🔍 StrategyViewSet.create - Data: {request.data}")
+            
+            serializer = self.get_serializer(data=request.data)
+            logger.info(f"🔍 StrategyViewSet.create - Serializer valid: {serializer.is_valid()}")
+            
+            if not serializer.is_valid():
+                logger.error(f"🔍 StrategyViewSet.create - Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            logger.info(f"🔍 StrategyViewSet.create - Saving strategy...")
+            serializer.save(user=request.user)
+            logger.info(f"🔍 StrategyViewSet.create - Strategy saved successfully: {serializer.instance.id}")
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"🔍 StrategyViewSet.create - Error: {str(e)}")
+            logger.error(f"🔍 StrategyViewSet.create - Error type: {type(e)}")
+            import traceback
+            logger.error(f"🔍 StrategyViewSet.create - Traceback: {traceback.format_exc()}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def backtest(self, request, pk=None):

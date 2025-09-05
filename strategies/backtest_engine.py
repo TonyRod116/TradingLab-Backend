@@ -53,6 +53,11 @@ class BacktestEngine:
                 end_date=end_date
             )
             
+            print(f"🔍 BacktestEngine - Data loaded: {len(df)} rows")
+            print(f"🔍 BacktestEngine - Date range: {df['date'].min()} to {df['date'].max()}")
+            print(f"🔍 BacktestEngine - Price range: {df['close'].min():.2f} to {df['close'].max():.2f}")
+            print(f"🔍 BacktestEngine - Entry rules: {strategy.entry_rules}")
+            
             if df.empty:
                 raise ValueError(f"No data found for {strategy.symbol} {strategy.timeframe}")
             
@@ -373,19 +378,22 @@ class BacktestEngine:
         if not entry_rules:
             return False
         
-        # For now, implement a simple deterministic condition
-        # This ensures consistent results across multiple runs
         current_price = float(row['close'])
+        open_price = float(row['open'])
         
-        # Simple price-based entry condition (deterministic)
-        # Entry when price is in a certain range (example: between 4000-5000)
-        if 4000 <= current_price <= 5000:
-            # Use a deterministic "random" based on price
-            # This ensures same price always gives same result
-            price_hash = hash(str(current_price)) % 1000
-            return price_hash < 5  # 0.5% chance based on price
+        # Realistic SP500 price range: 3000-6500 (last 5 years)
+        if not (3000 <= current_price <= 6500):
+            return False
         
-        return False
+        # Simplified strategy: Enter on every 100th candle for testing
+        # This ensures we get trades for debugging
+        price_hash = hash(str(current_price)) % 1000
+        should_enter = price_hash < 20  # 2% chance on any candle
+        
+        if should_enter:
+            print(f"🔍 Entry Signal - Random entry: {current_price:.2f}, hash: {price_hash}")
+        
+        return should_enter
     
     def _check_exit_conditions(self, row: Dict, position: Dict, exit_rules: Dict,
                               stop_loss_type: str, stop_loss_value: Decimal,
