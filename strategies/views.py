@@ -498,11 +498,17 @@ class QuantConnectBacktestView(APIView):
             strategy_name = strategy_data.get('name', 'Strategy from Builder')
             backtest_name = f"{strategy_name}_{int(time.time())}"
             
+            # Extract dates from backtest_params
+            start_date = backtest_params.get('start_date')
+            end_date = backtest_params.get('end_date')
+            
             # Execute complete backtest workflow
             result = qc_service.run_complete_backtest(
                 strategy_name=strategy_name,
                 lean_code=lean_code,
-                backtest_name=backtest_name
+                backtest_name=backtest_name,
+                start_date=start_date,
+                end_date=end_date
             )
             
             if not result['success']:
@@ -511,34 +517,32 @@ class QuantConnectBacktestView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
             
-            # Extract results from QuantConnect response
-            qc_results = result['results']
-            statistics = qc_results.get('statistics', {})
-            
-            # Map QuantConnect results to our format
-            backtest_results = {
-                'total_return': float(statistics.get('Total Return', 0)),
-                'total_return_percent': float(statistics.get('Total Return', 0)),
-                'sharpe_ratio': float(statistics.get('Sharpe Ratio', 0)),
-                'max_drawdown': float(statistics.get('Drawdown', 0)),
-                'max_drawdown_percent': float(statistics.get('Drawdown', 0)),
-                'win_rate': float(statistics.get('Win Rate', 0)),
-                'profit_factor': float(statistics.get('Profit Factor', 0)),
-                'total_trades': int(statistics.get('Total Trades', 0)),
-                'winning_trades': int(statistics.get('Win Count', 0)),
-                'losing_trades': int(statistics.get('Loss Count', 0)),
-                'avg_win': float(statistics.get('Average Win', 0)),
-                'avg_loss': float(statistics.get('Average Loss', 0)),
-                'largest_win': float(statistics.get('Largest Win', 0)),
-                'largest_loss': float(statistics.get('Largest Loss', 0)),
-                'volatility': float(statistics.get('Volatility', 0)),
-                'beta': float(statistics.get('Beta', 0)),
-                'alpha': float(statistics.get('Alpha', 0))
-            }
-            
+            # Since we're now returning immediately, we don't have results yet
+            # Return basic response for frontend polling
             project_id = result['project_id']
             compile_id = result['compile_id']
             backtest_id = result['backtest_id']
+            
+            # Create basic backtest results for immediate response
+            backtest_results = {
+                'total_return': 0,
+                'total_return_percent': 0,
+                'sharpe_ratio': 0,
+                'max_drawdown': 0,
+                'max_drawdown_percent': 0,
+                'win_rate': 0,
+                'profit_factor': 0,
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'avg_win': 0,
+                'avg_loss': 0,
+                'largest_win': 0,
+                'largest_loss': 0,
+                'volatility': 0,
+                'beta': 0,
+                'alpha': 0
+            }
             
             # Save QuantConnect IDs to database if strategy_id is provided
             strategy_id = strategy_data.get('id')
@@ -548,10 +552,9 @@ class QuantConnectBacktestView(APIView):
                     strategy.qc_project_id = project_id
                     strategy.qc_compile_id = compile_id
                     strategy.qc_backtest_id = backtest_id
-                    strategy.qc_status = 'Completed'
-                    strategy.qc_progress = 100.0
+                    strategy.qc_status = 'Running'
+                    strategy.qc_progress = 20.0
                     strategy.qc_last_sync = timezone.now()
-                    strategy.qc_results = qc_results
                     strategy.save()
                     print(f"💾 Saved QuantConnect IDs to strategy {strategy_id}")
                 except Strategy.DoesNotExist:
@@ -565,12 +568,12 @@ class QuantConnectBacktestView(APIView):
                     'project_id': project_id,
                     'compile_id': compile_id,
                     'backtest_id': backtest_id,
-                    'status': 'completed'
+                    'status': 'running'
                 },
                 'lean_code': lean_code,
                 'backtest_results': backtest_results,
                 'backtest_params': backtest_params,
-                'message': 'Backtest completed successfully in QuantConnect'
+                'message': 'Backtest started successfully - use polling to check progress'
             }
             
             return Response(response_data, status=status.HTTP_200_OK)

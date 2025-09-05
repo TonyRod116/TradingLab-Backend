@@ -61,29 +61,63 @@ class GPTQuantConnectParser:
         """Crea el prompt específico para QuantConnect"""
         
         return f"""
-Convierte la siguiente descripción de estrategia de trading en código Python válido para QuantConnect:
+Eres un experto en QuantConnect y trading algorítmico. Convierte la siguiente descripción de estrategia de trading en código Python funcional para QuantConnect.
 
 DESCRIPCIÓN: "{description}"
 
-REQUISITOS:
+PARÁMETROS:
 - Símbolo: {symbol}
-- Capital inicial: ${initial_capital:,}
-- Fecha inicio: {start_date}
-- Fecha fin: {end_date}
+- Capital: ${initial_capital:,}
+- Período: {start_date} a {end_date}
 - Benchmark: {benchmark}
 
 INSTRUCCIONES:
-1. Genera código Python completo y funcional para QuantConnect
-2. Usa la clase QCAlgorithm
-3. Incluye los métodos Initialize() y OnData()
-4. Implementa la lógica de la estrategia descrita
-5. Usa indicadores técnicos apropiados (RSI, SMA, MACD, etc.)
-6. Incluye gestión de riesgo básica
-7. Añade logging para debugging
-8. El código debe ser ejecutable directamente en QuantConnect
+1. Analiza la descripción e identifica todos los indicadores técnicos mencionados
+2. Identifica las condiciones de entrada y salida exactas
+3. Implementa la gestión de riesgo si se menciona (stop loss, take profit)
+4. Genera código Python completo y funcional para QuantConnect
+5. Usa los períodos correctos de los indicadores (5-day, 10-day, 20-day, etc.)
+6. Incluye logging para debugging
 
-FORMATO DE RESPUESTA:
-Solo devuelve el código Python, sin explicaciones adicionales ni markdown.
+FORMATO DE CÓDIGO REQUERIDO:
+```python
+from AlgorithmImports import *
+
+class TradingStrategy(QCAlgorithm):
+    def Initialize(self):
+        # Configuración básica
+        self.SetStartDate({start_date.replace('-', ', ')})
+        self.SetEndDate({end_date.replace('-', ', ')})
+        self.SetCash({initial_capital})
+        self.symbol = self.AddEquity("{symbol}", Resolution.Daily).Symbol
+        self.SetBenchmark("{benchmark}")
+        
+        # Indicadores técnicos
+        # (agregar aquí los indicadores necesarios)
+        
+        # Warm up
+        self.SetWarmUp(20)
+    
+    def OnData(self, data):
+        if self.IsWarmingUp:
+            return
+        
+        # Lógica de trading aquí
+        # (implementar las condiciones de entrada y salida)
+    
+    def OnOrderEvent(self, orderEvent):
+        if orderEvent.Status == OrderStatus.Filled:
+            self.Debug(f"Order filled: {{orderEvent}}")
+    
+    def OnEndOfAlgorithm(self):
+        self.Debug("Algorithm completed")
+```
+
+IMPORTANTE:
+- Solo devuelve el código Python completo
+- No incluyas explicaciones ni markdown
+- El código debe ser ejecutable directamente en QuantConnect
+- Implementa exactamente lo que se describe en la estrategia
 """
     
     def _generate_fallback_code(self, description: str, symbol: str, initial_capital: int,
@@ -110,7 +144,7 @@ class TradingStrategy(QCAlgorithm):
         
         # Initialize indicators
         self.rsi = self.RSI(self.symbol, 14)
-        self.sma = self.SMA(self.symbol, 20)
+        self.sma20 = self.SMA(self.symbol, 20)
         
         # Set up warm up period
         self.SetWarmUp(20)
@@ -120,7 +154,7 @@ class TradingStrategy(QCAlgorithm):
         if self.IsWarmingUp:
             return
             
-        if not self.rsi.IsReady or not self.sma.IsReady:
+        if not self.rsi.IsReady or not self.sma20.IsReady:
             return
             
         # Basic RSI strategy
