@@ -14,6 +14,7 @@ from .models import Strategy, BacktestResult, Trade
 from .metrics_calculator import (
     calculate_all_metrics, calculate_strategy_rating, get_rating_color
 )
+from .rule_evaluator import StrategyRuleEvaluator
 
 
 class BacktestEngine:
@@ -100,7 +101,7 @@ class BacktestEngine:
                                    initial_capital: Decimal, commission: Decimal,
                                    slippage: Decimal, chunk_size: int = 10000) -> Tuple[List[Dict], Dict]:
         """
-        Optimized strategy simulation using vectorized operations
+        Optimized strategy simulation using real rule evaluation
         
         Args:
             df: Market data DataFrame
@@ -119,6 +120,13 @@ class BacktestEngine:
         peak_value = portfolio_value
         max_drawdown = 0
         
+        # Create rule evaluator for REAL strategy evaluation
+        try:
+            rule_evaluator = StrategyRuleEvaluator(df)
+        except Exception as e:
+            print(f"Warning: Could not create rule evaluator: {e}")
+            rule_evaluator = None
+        
         # Process data in chunks for large datasets
         total_rows = len(df)
         if total_rows > chunk_size:
@@ -127,22 +135,133 @@ class BacktestEngine:
                 end_idx = min(start_idx + chunk_size, total_rows)
                 chunk_df = df.iloc[start_idx:end_idx]
                 
-                chunk_trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
+                chunk_trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk_with_real_rules(
                     chunk_df, strategy, portfolio_value, current_position, 
-                    peak_value, max_drawdown, commission, slippage
+                    peak_value, max_drawdown, commission, slippage, 
+                    rule_evaluator, start_idx
                 )
                 trades.extend(chunk_trades)
         else:
             # Process entire dataset at once
-            trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk(
+            trades, portfolio_value, current_position, peak_value, max_drawdown = self._process_chunk_with_real_rules(
                 df, strategy, portfolio_value, current_position, 
-                peak_value, max_drawdown, commission, slippage
+                peak_value, max_drawdown, commission, slippage,
+                rule_evaluator, 0
             )
         
         # Calculate final performance metrics
         performance = self._calculate_performance_metrics(trades, initial_capital, portfolio_value, max_drawdown)
         
         return trades, performance
+    
+    def _process_chunk_with_real_rules(self, chunk_df: pd.DataFrame, strategy: Strategy, 
+                                     portfolio_value: float, current_position: Optional[Dict],
+                                     peak_value: float, max_drawdown: float, commission: Decimal,
+                                     slippage: Decimal, rule_evaluator: Optional[StrategyRuleEvaluator],
+                                     global_start_idx: int = 0) -> Tuple[List[Dict], float, Optional[Dict], float, float]:
+        """
+        Process a chunk of data with REAL rule evaluation
+        """
+        trades = []
+        
+        # Convert to list for iteration (more efficient than iterrows)
+        data_list = chunk_df.to_dict('records')
+        
+        for i, row in enumerate(data_list):
+            current_price = float(row['close'])
+            current_date = row['date']
+            global_row_index = global_start_idx + i
+            
+            # Check for entry signals using REAL rules
+            if current_position is None:
+                entry_triggered = False
+                
+                if rule_evaluator:
+                    try:
+                        entry_triggered = rule_evaluator.evaluate_entry_rules(
+                            global_row_index, strategy.entry_rules
+                        )
+                    except Exception as e:
+                        print(f"Entry rule evaluation error at row {global_row_index}: {e}")
+                        entry_triggered = False
+                else:
+                    # Fallback to old logic if rule evaluator failed
+                    entry_triggered = self._check_entry_conditions(row, strategy.entry_rules)
+                
+                if entry_triggered:
+                    # Enter position
+                    entry_price = self._apply_slippage(current_price, slippage, 'buy')
+                    current_position = {
+                        'action': 'buy',
+                        'entry_price': entry_price,
+                        'entry_date': current_date,
+                        'quantity': 1
+                    }
+            
+            # Check for exit signals using REAL rules + risk management
+            elif current_position is not None:
+                exit_reason = None
+                
+                # First check rule-based exits
+                if rule_evaluator:
+                    try:
+                        exit_reason = rule_evaluator.evaluate_exit_rules(
+                            global_row_index, strategy.exit_rules, current_position
+                        )
+                    except Exception as e:
+                        print(f"Exit rule evaluation error at row {global_row_index}: {e}")
+                
+                # If no rule-based exit, check risk management (stop loss/take profit)
+                if not exit_reason:
+                    exit_reason = self._check_exit_conditions(
+                        row, current_position, strategy.exit_rules,
+                        strategy.stop_loss_type, strategy.stop_loss_value,
+                        strategy.take_profit_type, strategy.take_profit_value
+                    )
+                
+                if exit_reason:
+                    # Exit position
+                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
+                    
+                    # Calculate trade metrics
+                    trade_duration = (current_date - current_position['entry_date']).total_seconds() * 1000
+                    pnl = (exit_price - current_position['entry_price']) * current_position['quantity']
+                    trade_commission = float(commission)
+                    trade_slippage = abs(exit_price - current_price) * float(slippage) / 100
+                    net_pnl = pnl - trade_commission - trade_slippage
+                    
+                    # Create trade record
+                    trade_data = {
+                        'action': current_position['action'],
+                        'entry_price': current_position['entry_price'],
+                        'exit_price': exit_price,
+                        'entry_date': current_position['entry_date'],
+                        'exit_date': current_date,
+                        'quantity': current_position['quantity'],
+                        'pnl': pnl,
+                        'commission': trade_commission,
+                        'slippage': trade_slippage,
+                        'net_pnl': net_pnl,
+                        'reason': exit_reason,
+                        'duration': int(trade_duration)
+                    }
+                    trades.append(trade_data)
+                    
+                    # Update portfolio value
+                    portfolio_value += net_pnl
+                    
+                    # Update drawdown tracking
+                    if portfolio_value > peak_value:
+                        peak_value = portfolio_value
+                    else:
+                        current_drawdown = (peak_value - portfolio_value) / peak_value
+                        if current_drawdown > max_drawdown:
+                            max_drawdown = current_drawdown
+                    
+                    # Reset position
+                    current_position = None
+        
+        return trades, portfolio_value, current_position, peak_value, max_drawdown
     
     def _process_chunk(self, chunk_df: pd.DataFrame, strategy: Strategy, 
                       portfolio_value: float, current_position: Optional[Dict],
@@ -361,20 +480,18 @@ class BacktestEngine:
     
     def _check_entry_conditions(self, row: Dict, entry_rules: Dict) -> bool:
         """
-        Check if entry conditions are met
+        *** DEPRECATED - FALLBACK ONLY ***
+        This function uses FAKE hardcoded logic and should NOT be used.
+        Real rule evaluation is done by StrategyRuleEvaluator.
         
-        Args:
-            row: Current market data row
-            entry_rules: Entry rules configuration
-        
-        Returns:
-            True if entry conditions are met
+        This is only kept as a fallback if the real evaluator fails.
         """
+        print("WARNING: Using deprecated fake entry conditions - rule evaluator failed!")
+        
         if not entry_rules:
             return False
         
-        # For now, implement a simple deterministic condition
-        # This ensures consistent results across multiple runs
+        # FAKE LOGIC - DO NOT RELY ON THIS
         current_price = float(row['close'])
         
         # Simple price-based entry condition (deterministic)
