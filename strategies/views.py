@@ -292,6 +292,33 @@ class StrategyViewSet(viewsets.ModelViewSet):
         serializer = StrategySummarySerializer(strategies, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], permission_classes=[])
+    def community(self, request):
+        """
+        Get all strategies from all users for community view (no authentication required)
+        
+        GET /api/strategies/community/
+        """
+        try:
+            # Get all active strategies from all users
+            strategies = Strategy.objects.filter(
+                is_active=True
+            ).prefetch_related('backtests').select_related('user').order_by('-created_at')
+            
+            # Serialize with summary data
+            serializer = StrategySummarySerializer(strategies, many=True)
+            
+            return Response({
+                'count': len(serializer.data),
+                'results': serializer.data
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to load community strategies: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class BacktestResultViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for backtest results"""
