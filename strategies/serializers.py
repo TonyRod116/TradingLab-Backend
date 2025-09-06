@@ -80,7 +80,7 @@ class StrategySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules',
             'exit_rules', 'stop_loss_type', 'stop_loss_value', 'take_profit_type',
-            'take_profit_value', 'initial_capital', 'is_active', 'created_at', 'updated_at',
+            'take_profit_value', 'initial_capital', 'is_active', 'is_public', 'created_at', 'updated_at',
             'backtests', 'backtest_count', 'latest_backtest'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -188,7 +188,7 @@ class StrategySummarySerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'symbol', 'timeframe', 
             'entry_rules', 'exit_rules', 'stop_loss_type', 'stop_loss_value', 
             'take_profit_type', 'take_profit_value', 'initial_capital', 
-            'is_active', 'created_at', 'updated_at', 'created_by',
+            'is_active', 'is_public', 'created_at', 'updated_at', 'created_by',
             # Backtest metrics
             'win_rate', 'total_trades', 'profit_factor', 'max_drawdown', 
             'sharpe_ratio', 'total_return', 'total_return_percent', 
@@ -220,7 +220,7 @@ class StrategyListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules',
             'exit_rules', 'stop_loss_type', 'stop_loss_value', 'take_profit_type',
-            'take_profit_value', 'initial_capital', 'is_active', 'created_at', 'updated_at',
+            'take_profit_value', 'initial_capital', 'is_active', 'is_public', 'created_at', 'updated_at',
             'created_by', 'backtest_count', 'latest_backtest',
             # Backtest metrics
             'win_rate', 'total_trades', 'profit_factor', 'max_drawdown', 

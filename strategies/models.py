@@ -41,6 +41,7 @@ class Strategy(models.Model):
     
     # Status
     is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False, help_text='Whether this strategy is public/example for all users')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
