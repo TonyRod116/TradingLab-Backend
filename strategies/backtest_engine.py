@@ -513,6 +513,20 @@ class BacktestEngine:
             'net_pnl': net_pnl
         }
     
+    def _safe_decimal(self, value):
+        """Safely convert value to Decimal, handling inf and None values"""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            if value == float('inf') or value == float('-inf'):
+                return Decimal('0')  # Convert inf to 0 for database storage
+            if np.isnan(value):
+                return Decimal('0')  # Convert NaN to 0
+        try:
+            return Decimal(str(value))
+        except (ValueError, TypeError, OverflowError):
+            return Decimal('0')
+
     def _calculate_performance_metrics(self, trades: List[Dict], initial_capital: Decimal,
                                      start_date: datetime, end_date: datetime) -> Dict:
         """
@@ -543,31 +557,31 @@ class BacktestEngine:
         rating_color = get_rating_color(rating)
         summary = self._generate_summary_description(metrics, rating)
         
-        # Convert to Decimal for database storage
+        # Convert to Decimal for database storage using safe conversion
         return {
-            'total_return': Decimal(str(metrics['total_return'])),
-            'total_return_percent': Decimal(str(metrics['total_return_percent'])),
+            'total_return': self._safe_decimal(metrics['total_return']),
+            'total_return_percent': self._safe_decimal(metrics['total_return_percent']),
             'total_trades': metrics['total_trades'],
             'winning_trades': metrics['winning_trades'],
             'losing_trades': metrics['losing_trades'],
-            'win_rate': Decimal(str(metrics['win_rate'])),
-            'profit_factor': Decimal(str(metrics['profit_factor'])),
-            'avg_win': Decimal(str(metrics['avg_win'])),
-            'avg_loss': Decimal(str(metrics['avg_loss'])),
-            'largest_win': Decimal(str(metrics['largest_win'])),
-            'largest_loss': Decimal(str(metrics['largest_loss'])),
-            'sharpe_ratio': Decimal(str(metrics['sharpe_ratio'])) if metrics['sharpe_ratio'] is not None else None,
-            'sortino_ratio': Decimal(str(metrics['sortino_ratio'])) if metrics['sortino_ratio'] is not None else None,
-            'calmar_ratio': Decimal(str(metrics['calmar_ratio'])) if metrics['calmar_ratio'] is not None else None,
-            'volatility': Decimal(str(metrics['volatility'])) if metrics['volatility'] is not None else None,
-            'max_drawdown': Decimal(str(metrics['max_drawdown'])),
-            'max_drawdown_percent': Decimal(str(metrics['max_drawdown_percent'])),
-            'recovery_factor': Decimal(str(metrics['recovery_factor'])) if metrics['recovery_factor'] is not None else None,
+            'win_rate': self._safe_decimal(metrics['win_rate']),
+            'profit_factor': self._safe_decimal(metrics['profit_factor']),
+            'avg_win': self._safe_decimal(metrics['avg_win']),
+            'avg_loss': self._safe_decimal(metrics['avg_loss']),
+            'largest_win': self._safe_decimal(metrics['largest_win']),
+            'largest_loss': self._safe_decimal(metrics['largest_loss']),
+            'sharpe_ratio': self._safe_decimal(metrics['sharpe_ratio']),
+            'sortino_ratio': self._safe_decimal(metrics['sortino_ratio']),
+            'calmar_ratio': self._safe_decimal(metrics['calmar_ratio']),
+            'volatility': self._safe_decimal(metrics['volatility']),
+            'max_drawdown': self._safe_decimal(metrics['max_drawdown']),
+            'max_drawdown_percent': self._safe_decimal(metrics['max_drawdown_percent']),
+            'recovery_factor': self._safe_decimal(metrics['recovery_factor']),
             'max_consecutive_wins': metrics['max_consecutive_wins'],
             'max_consecutive_losses': metrics['max_consecutive_losses'],
-            'avg_trade_duration': Decimal(str(metrics['avg_trade_duration'])) if metrics['avg_trade_duration'] is not None else None,
-            'trades_per_month': Decimal(str(metrics['trades_per_month'])) if metrics['trades_per_month'] is not None else None,
-            'expectancy': Decimal(str(metrics['expectancy'])) if metrics['expectancy'] is not None else None,
+            'avg_trade_duration': self._safe_decimal(metrics['avg_trade_duration']),
+            'trades_per_month': self._safe_decimal(metrics['trades_per_month']),
+            'expectancy': self._safe_decimal(metrics['expectancy']),
             'rating': rating,
             'rating_color': rating_color,
             'summary_description': summary
