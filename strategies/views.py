@@ -44,9 +44,13 @@ class StrategyViewSet(viewsets.ModelViewSet):
         return StrategySerializer
     
     def get_queryset(self):
-        """Allow users to see all strategies, not just their own"""
-        # Allow users to see ALL strategies from all users
-        queryset = Strategy.objects.all()
+        """Return different querysets based on the action"""
+        # For list action (My Profile), show only user's own strategies
+        if self.action == 'list':
+            queryset = Strategy.objects.filter(user=self.request.user)
+        else:
+            # For detail actions, allow access to ALL strategies from all users
+            queryset = Strategy.objects.all()
         
         if self.action == 'list':
             # For list view, only prefetch the latest backtest
@@ -55,10 +59,14 @@ class StrategyViewSet(viewsets.ModelViewSet):
             ).select_related('user')
         else:
             # For detail view, prefetch all backtests and trades with optimized queries
+            # CRITICAL: Ensure equity_curve data is loaded for all strategies
             queryset = queryset.prefetch_related(
                 'backtests__trades',
                 'backtests__equity_curve'
             ).select_related('user')
+            
+            # Force evaluation to ensure prefetch_related works
+            list(queryset)
         
         return queryset
     
@@ -329,10 +337,8 @@ class StrategyViewSet(viewsets.ModelViewSet):
         GET /api/strategies/community/
         """
         try:
-            # Get all active strategies from all users
-            strategies = Strategy.objects.filter(
-                is_active=True
-            ).prefetch_related('backtests').select_related('user').order_by('-created_at')
+            # Get ALL strategies from all users for community view
+            strategies = Strategy.objects.all().prefetch_related('backtests').select_related('user').order_by('-created_at')
             
             # Serialize with summary data
             serializer = StrategySummarySerializer(strategies, many=True)
@@ -403,6 +409,35 @@ class BacktestResultViewSet(viewsets.ReadOnlyModelViewSet):
         }
         
         return Response(summary)
+    
+    @action(detail=True, methods=['get'], url_path='debug-equity')
+    def debug_equity(self, request, pk=None):
+        """
+        Debug endpoint to check equity curve data
+        
+        GET /api/strategies/{id}/debug-equity/
+        """
+        strategy = self.get_object()
+        latest_backtest = strategy.backtests.first()
+        
+        if not latest_backtest:
+            return Response({'error': 'No backtest found'})
+        
+        equity_points = latest_backtest.equity_curve.all()
+        
+        return Response({
+            'strategy_id': strategy.id,
+            'strategy_name': strategy.name,
+            'backtest_id': latest_backtest.id,
+            'equity_points_count': equity_points.count(),
+            'equity_points': [
+                {
+                    'timestamp': point.timestamp,
+                    'equity_value': float(point.equity_value),
+                    'drawdown': float(point.drawdown)
+                } for point in equity_points[:5]  # First 5 points
+            ]
+        })
     
     @action(detail=True, methods=['get'])
     def equity_curve(self, request, pk=None):
