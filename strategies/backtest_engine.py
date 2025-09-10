@@ -386,9 +386,6 @@ class BacktestEngine:
         price_hash = hash(str(current_price)) % 1000
         should_enter = price_hash < 20  # 2% chance on any candle
         
-        if should_enter:
-            print(f"🎯 [DEBUG] Random entry triggered at price {current_price}")
-        
         return should_enter
     
     def _check_exit_conditions(self, row: Dict, position: Dict, exit_rules: Dict,
