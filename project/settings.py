@@ -47,19 +47,32 @@ if DEBUG:
     ]
 
 else:
-    ALLOWED_HOSTS = [env('DEPLOYED_BACKEND_URL').replace('https://', '')] # removes protocol (https://)
+    # Production settings
+    ALLOWED_HOSTS = [
+        'tradelab-39583a78c028.herokuapp.com',
+        '*.herokuapp.com'
+    ]
 
     CORS_ALLOWED_ORIGINS = [
-        env('DEPLOYED_FRONTEND_URL'), # Deployed frontend url only
+        "https://trade-lab.netlify.app",  # Netlify frontend URL (with hyphen)
+        "https://tradelab.netlify.app",  # Alternative Netlify frontend URL (without hyphen)
+        "https://tradelab-39583a78c028.herokuapp.com",  # Heroku backend URL
     ]
 
     CSRF_TRUSTED_ORIGINS = [
-        env('DEPLOYED_BACKEND_URL'), # Deployed backend url only
+        "https://tradelab-39583a78c028.herokuapp.com",
+        "https://trade-lab.netlify.app",
+        "https://tradelab.netlify.app",
     ]
 
 # Additional CORS settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # Keep this False for security
+
+# Debug CORS settings for production
+if not DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True  # Temporary for debugging
+    CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_HEADERS = [
     'accept',
     'accept-encoding',
