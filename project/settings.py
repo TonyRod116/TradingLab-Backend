@@ -169,8 +169,8 @@ WSGI_APPLICATION = 'project.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Database configuration
-if DEBUG:
-    # Use SQLite for local development
+if os.getenv('USE_SQLITE_LOCAL', 'false').lower() == 'true':
+    # Use SQLite for local development when explicitly requested
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -178,7 +178,7 @@ if DEBUG:
         }
     }
 else:
-    # Use PostgreSQL for production (Heroku)
+    # Use PostgreSQL (default for production and when PostgreSQL is available)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',

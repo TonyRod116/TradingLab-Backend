@@ -399,16 +399,13 @@ class QuantConnectService:
                 json=data
             )
             
-            print(f"Status Code: {response.status_code}")
             result = response.json()
-            print(f"Response: {json.dumps(result, indent=2)}")
             
             if response.status_code == 200:
                 # Los campos status y progress están dentro del objeto 'backtest'
                 backtest_data = result.get('backtest', {})
                 status = backtest_data.get('status', 'Unknown')
                 progress = backtest_data.get('progress', 0)
-                print(f"Estado: {status}, Progreso: {progress}%")
                 
                 return {
                     'state': status,
@@ -461,7 +458,6 @@ class QuantConnectService:
     def run_complete_backtest(self, strategy_name: str, lean_code: str, strategy_id: int = None, backtest_name: str = None, start_date: str = None, end_date: str = None) -> Dict[str, Any]:
         """Run a complete backtest workflow with REAL QuantConnect API - optimized for speed"""
         try:
-            print(f"🚀 Starting REAL QuantConnect backtest for: {strategy_name}")
             
             # Modify LEAN code to use the provided dates or default to 2 days for speed
             if start_date and end_date:
@@ -533,7 +529,6 @@ class QuantConnectService:
                     strategy.qc_progress = 20
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
-                    print(f"💾 Updated strategy {strategy_id}: Running (20%)")
                 except Strategy.DoesNotExist:
                     pass
             
@@ -570,8 +565,6 @@ class QuantConnectService:
             start_date_str = f"DateTime({start_dt.year}, {start_dt.month}, {start_dt.day})"
             end_date_str = f"DateTime({end_dt.year}, {end_dt.month}, {end_dt.day})"
             
-            print(f"📅 Using dates: {start_date} to {end_date}")
-            print(f"📅 LEAN format: {start_date_str} to {end_date_str}")
             
             # Replace dates in the code
             modified_code = re.sub(
@@ -846,7 +839,7 @@ class QuantConnectService:
                     strategy.qc_results = results
                     strategy.save()
                 except Exception as e:
-                    print(f"Error getting backtest results: {e}")
+                    pass
             
             return {
                 'status': state,
