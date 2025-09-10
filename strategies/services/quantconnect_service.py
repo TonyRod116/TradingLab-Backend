@@ -216,8 +216,7 @@ class QuantConnectService:
             if response.status_code == 200:
                 result = response.json()
                 
-                # Debug: print the full response to understand the structure
-                print(f"🔍 DEBUG - Full backtest status response: {result}")
+                # Extract backtest data - it might be nested differently
                 
                 # Extract backtest data - it might be nested differently
                 backtest_data = result.get('backtest', {})
@@ -235,7 +234,6 @@ class QuantConnectService:
                 except (ValueError, TypeError):
                     progress = 0
                 
-                print(f"🔍 DEBUG - Extracted status: '{status}', progress: {progress}")
                 
                 return {
                     'success': True,
@@ -245,11 +243,9 @@ class QuantConnectService:
                     'failed': status in ['Failed', 'Error', 'BuildError', 'failed', 'error']
                 }
             else:
-                print(f"❌ DEBUG - HTTP Error {response.status_code}: {response.text}")
                 return {'success': False, 'error': f'HTTP {response.status_code}'}
                 
         except Exception as e:
-            print(f"❌ DEBUG - Exception in check_backtest_status_direct: {e}")
             return {'success': False, 'error': str(e)}
     
     def check_backtest_status(self, project_id: int, backtest_id: str) -> Dict[str, Any]:
@@ -420,11 +416,9 @@ class QuantConnectService:
                     'backtest': backtest_data
                 }
             else:
-                print("❌ Error verificando estado")
                 return {'state': 'Error', 'progress': 0, 'error': f'HTTP {response.status_code}'}
                 
         except Exception as e:
-            print(f"❌ Error: {e}")
             return {'state': 'Error', 'progress': 0, 'error': str(e)}
     
     def get_backtest_results(self, project_id: str, backtest_id: str) -> Dict[str, Any]:
@@ -475,10 +469,8 @@ class QuantConnectService:
                 modified_lean_code = self._modify_lean_for_2_days(lean_code)
             
             # 1. Create project
-            print("📁 1. Creating project...")
             project = self.create_project(strategy_name)
             project_id = project['projectId']
-            print(f"✅ Project created: {project_id}")
             
             # Save project_id to database if strategy_id provided
             if strategy_id:
@@ -489,20 +481,14 @@ class QuantConnectService:
                     strategy.qc_progress = 0
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
-                    print(f"💾 Saved project_id {project_id} to strategy {strategy_id}")
                 except Strategy.DoesNotExist:
-                    print(f"⚠️ Strategy {strategy_id} not found in database")
             
             # 2. Update main.py with strategy code
-            print(f"📝 2. Updating main.py with strategy code...")
             self.update_file(project_id, 'main.py', modified_lean_code)
-            print("✅ File updated successfully")
             
             # 3. Compile project
-            print("🔨 3. Compiling project...")
             compile_result = self.compile_project(project_id)
             compile_id = compile_result['compileId']
-            print(f"✅ Compilation started: {compile_id}")
             
             # Save compile_id to database
             if strategy_id:
@@ -513,20 +499,14 @@ class QuantConnectService:
                     strategy.qc_progress = 10
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
-                    print(f"💾 Saved compile_id {compile_id} to strategy {strategy_id}")
                 except Strategy.DoesNotExist:
-                    print(f"⚠️ Strategy {strategy_id} not found in database")
             
             # 4. Wait for compilation (short timeout)
-            print("⏳ 4. Waiting for compilation...")
             self.wait_for_compilation(project_id, compile_id, timeout=30)
-            print("✅ Compilation completed")
             
             # 5. Run backtest
-            print("🏃 5. Starting backtest...")
             backtest_result = self.run_backtest(project_id, compile_id, backtest_name)
             backtest_id = backtest_result['backtestId']
-            print(f"✅ Backtest started: {backtest_id}")
             
             # Save backtest_id to database
             if strategy_id:
@@ -537,12 +517,9 @@ class QuantConnectService:
                     strategy.qc_progress = 20
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
-                    print(f"💾 Saved backtest_id {backtest_id} to strategy {strategy_id}")
                 except Strategy.DoesNotExist:
-                    print(f"⚠️ Strategy {strategy_id} not found in database")
             
             # 6. Return immediately with backtest started - let frontend handle polling
-            print("✅ Backtest started successfully - returning to frontend for polling")
             
             # Update database with initial status
             if strategy_id:
@@ -554,7 +531,6 @@ class QuantConnectService:
                     strategy.save()
                     print(f"💾 Updated strategy {strategy_id}: Running (20%)")
                 except Strategy.DoesNotExist:
-                    print(f"⚠️ Strategy {strategy_id} not found in database")
             
             # Return immediately with backtest info for frontend polling
             return {
@@ -570,7 +546,6 @@ class QuantConnectService:
             }
             
         except Exception as e:
-            print(f"❌ QuantConnect API error: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -607,15 +582,10 @@ class QuantConnectService:
             )
             
             # Log the modified code to verify dates are correct
-            print(f"📝 Modified LEAN code preview:")
-            print(f"   Start Date: {start_date_str}")
-            print(f"   End Date: {end_date_str}")
-            print(f"   Code length: {len(modified_code)} characters")
             
             return modified_code
             
         except ValueError as e:
-            print(f"❌ Error parsing dates: {e}")
             # Fallback to 2-day period
             return self._modify_lean_for_2_days(lean_code)
     
@@ -866,7 +836,6 @@ class QuantConnectService:
                     strategy.qc_results = results
                     strategy.save()
                 except Exception as e:
-                    print(f"⚠️ Could not fetch results: {e}")
             
             return {
                 'status': state,

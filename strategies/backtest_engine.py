@@ -53,10 +53,6 @@ class BacktestEngine:
                 end_date=end_date
             )
             
-            print(f"🔍 BacktestEngine - Data loaded: {len(df)} rows")
-            print(f"🔍 BacktestEngine - Date range: {df['date'].min()} to {df['date'].max()}")
-            print(f"🔍 BacktestEngine - Price range: {df['close'].min():.2f} to {df['close'].max():.2f}")
-            print(f"🔍 BacktestEngine - Entry rules: {strategy.entry_rules}")
             
             if df.empty:
                 raise ValueError(f"No data found for {strategy.symbol} {strategy.timeframe}")
@@ -391,7 +387,6 @@ class BacktestEngine:
         should_enter = price_hash < 20  # 2% chance on any candle
         
         if should_enter:
-            print(f"🔍 Entry Signal - Random entry: {current_price:.2f}, hash: {price_hash}")
         
         return should_enter
     
