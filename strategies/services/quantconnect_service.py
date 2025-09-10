@@ -8,6 +8,7 @@ import time
 import re
 import uuid
 import random
+from datetime import datetime
 import hashlib
 from base64 import b64encode
 from typing import Dict, Any, Optional
@@ -482,6 +483,7 @@ class QuantConnectService:
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
                 except Strategy.DoesNotExist:
+                    pass
             
             # 2. Update main.py with strategy code
             self.update_file(project_id, 'main.py', modified_lean_code)
@@ -500,6 +502,7 @@ class QuantConnectService:
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
                 except Strategy.DoesNotExist:
+                    pass
             
             # 4. Wait for compilation (short timeout)
             self.wait_for_compilation(project_id, compile_id, timeout=30)
@@ -518,6 +521,7 @@ class QuantConnectService:
                     strategy.qc_last_sync = datetime.now()
                     strategy.save()
                 except Strategy.DoesNotExist:
+                    pass
             
             # 6. Return immediately with backtest started - let frontend handle polling
             
@@ -531,6 +535,7 @@ class QuantConnectService:
                     strategy.save()
                     print(f"💾 Updated strategy {strategy_id}: Running (20%)")
                 except Strategy.DoesNotExist:
+                    pass
             
             # Return immediately with backtest info for frontend polling
             return {
@@ -808,14 +813,19 @@ class QuantConnectService:
             # Get real status from QuantConnect
             status = self.get_backtest_status(strategy.qc_project_id, strategy.qc_backtest_id)
             
-            # Use case-insensitive field access and normalize status
-            from utils.json_ci import get_ci
-            from strategies.domain import normalize_status
+            # Extract status and progress from response
+            raw_state = status.get('status', 'Unknown')
+            raw_progress = status.get('progress', 0)
             
-            raw_state = get_ci(status, "Status", "state")
-            raw_progress = get_ci(status, "Progress", "progress", default=0)
-            
-            state = normalize_status(raw_state).value
+            # Normalize status
+            if raw_state in ['Completed', 'Completed.']:
+                state = 'Completed'
+            elif raw_state in ['Running', 'InProgress']:
+                state = 'Running'
+            elif raw_state in ['Failed', 'Error']:
+                state = 'Failed'
+            else:
+                state = 'Unknown'
             
             try:
                 progress = float(raw_progress)
@@ -836,7 +846,8 @@ class QuantConnectService:
                     strategy.qc_results = results
                     strategy.save()
                 except Exception as e:
-git add            
+                    print(f"Error getting backtest results: {e}")
+            
             return {
                 'status': state,
                 'progress': progress,
