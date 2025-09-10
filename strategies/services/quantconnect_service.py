@@ -836,7 +836,7 @@ class QuantConnectService:
                     strategy.qc_results = results
                     strategy.save()
                 except Exception as e:
-            
+git add            
             return {
                 'status': state,
                 'progress': progress,
