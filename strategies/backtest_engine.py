@@ -387,6 +387,7 @@ class BacktestEngine:
         should_enter = price_hash < 20  # 2% chance on any candle
         
         if should_enter:
+            print(f"🎯 [DEBUG] Random entry triggered at price {current_price}")
         
         return should_enter
     
