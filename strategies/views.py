@@ -44,8 +44,9 @@ class StrategyViewSet(viewsets.ModelViewSet):
         return StrategySerializer
     
     def get_queryset(self):
-        """Optimize queryset with prefetch_related for list view"""
-        queryset = Strategy.objects.filter(user=self.request.user)
+        """Allow users to see all strategies, not just their own"""
+        # Allow users to see ALL strategies from all users
+        queryset = Strategy.objects.all()
         
         if self.action == 'list':
             # For list view, only prefetch the latest backtest
