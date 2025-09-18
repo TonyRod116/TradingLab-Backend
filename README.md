@@ -415,6 +415,44 @@ Designed a modular architecture that can easily scale to handle multiple users, 
 
 Currently, there are no known bugs in the system. All major functionality has been tested and is working correctly. The error handling mechanisms ensure that any unexpected issues are logged and handled gracefully without affecting the user experience.
 
+## Strategy Creation Flow
+
+### Visual Builder
+The platform includes a comprehensive visual strategy builder that allows users to create trading strategies through a step-by-step wizard:
+
+1. **Basic Information**: Strategy name, description, symbol, and timeframe
+2. **Risk Management**: Position sizing, stop loss, and take profit configuration
+3. **Entry Rules**: Define when to enter trades using technical indicators
+4. **Exit Rules**: Define when to exit trades using technical indicators
+5. **Backtest**: Review and run backtests on the created strategy
+
+### Natural Language Processing
+Users can describe their trading strategies in plain English, and the system will automatically convert them to executable rules:
+
+**Example**: "Buy EURUSD on H4 when price crosses above SMA(20) and RSI(14) < 30. SL 1%, TP 2%, capital 10k."
+
+### Supported Features
+- **100+ Trading Instruments**: Forex, Futures, Cryptocurrencies, Stocks, ETFs
+- **50+ Timeframes**: From tick data to yearly
+- **200+ Technical Indicators**: RSI, MACD, Bollinger Bands, VWAP, etc.
+- **100+ Trading Conditions**: Price, volume, time, pattern-based
+- **Advanced Risk Management**: Position sizing, stop losses, take profits
+
+## API Documentation
+
+The platform provides a comprehensive REST API for strategy creation and backtesting:
+
+- **Strategy Management**: Create, read, update, delete strategies
+- **Backtesting**: Run backtests with detailed performance metrics
+- **Validation**: Comprehensive validation for all strategy parameters
+- **Enums**: Get all supported symbols, timeframes, and indicators
+
+See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for complete API reference.
+
+## Manual QA Script
+
+For testing the strategy creation flow, see [MANUAL_QA_SCRIPT.md](MANUAL_QA_SCRIPT.md) for step-by-step testing instructions.
+
 ## Future Improvements
 
 ### Short-term Enhancements

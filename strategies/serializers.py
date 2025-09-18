@@ -5,6 +5,83 @@ Serializers for trading strategies and backtesting
 from rest_framework import serializers
 from decimal import Decimal
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
+from .enums import (
+    SUPPORTED_SYMBOLS, SUPPORTED_TIMEFRAMES, SUPPORTED_INDICATORS, SUPPORTED_OPERATORS,
+    STOP_LOSS_TYPES, TAKE_PROFIT_TYPES, STRATEGY_STATUS, RULE_TYPES, ACTION_TYPES, LOGICAL_OPERATORS
+)
+
+
+class RuleConditionSerializer(serializers.Serializer):
+    """Serializer for rule conditions"""
+    left_operand = serializers.ChoiceField(choices=SUPPORTED_INDICATORS, help_text='Left operand indicator')
+    operator = serializers.ChoiceField(choices=SUPPORTED_OPERATORS, help_text='Comparison operator')
+    right_operand = serializers.CharField(help_text='Right operand (indicator or value)')
+    logical_operator = serializers.ChoiceField(choices=LOGICAL_OPERATORS, default='and', help_text='Logical operator for multiple conditions')
+
+
+class RuleSerializer(serializers.Serializer):
+    """Serializer for trading rules"""
+    name = serializers.CharField(max_length=200, help_text='Rule name')
+    rule_type = serializers.ChoiceField(choices=RULE_TYPES, help_text='Type of rule')
+    action_type = serializers.ChoiceField(choices=ACTION_TYPES, required=False, help_text='Action type for action rules')
+    conditions = RuleConditionSerializer(many=True, required=False, help_text='Rule conditions')
+    priority = serializers.IntegerField(default=1, help_text='Rule priority')
+    parameters = serializers.JSONField(default=dict, help_text='Additional rule parameters')
+
+
+class StrategyCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating strategies with validation"""
+    
+    # Override fields to use proper validation
+    symbol = serializers.ChoiceField(choices=SUPPORTED_SYMBOLS, help_text='Trading symbol')
+    timeframe = serializers.ChoiceField(choices=SUPPORTED_TIMEFRAMES, help_text='Data timeframe')
+    stop_loss_type = serializers.ChoiceField(choices=STOP_LOSS_TYPES, help_text='Stop loss type')
+    take_profit_type = serializers.ChoiceField(choices=TAKE_PROFIT_TYPES, help_text='Take profit type')
+    status = serializers.ChoiceField(choices=STRATEGY_STATUS, default='DRAFT', help_text='Strategy status')
+    
+    # Entry and exit rules as arrays of rules
+    entry_rules = RuleSerializer(many=True, help_text='Entry rules')
+    exit_rules = RuleSerializer(many=True, help_text='Exit rules', required=False, allow_empty=True)
+    
+    class Meta:
+        model = Strategy
+        fields = [
+            'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules', 'exit_rules',
+            'stop_loss_type', 'stop_loss_value', 'take_profit_type', 'take_profit_value',
+            'initial_capital', 'status'
+        ]
+        read_only_fields = ['id']
+    
+    def validate(self, data):
+        """Validate strategy data"""
+        print(f"🔍 StrategyCreateSerializer.validate - Received data keys: {list(data.keys())}")
+        print(f"🔍 StrategyCreateSerializer.validate - Entry rules: {data.get('entry_rules', [])}")
+        print(f"🔍 StrategyCreateSerializer.validate - Exit rules: {data.get('exit_rules', [])}")
+        print(f"🔍 StrategyCreateSerializer.validate - Exit rules type: {type(data.get('exit_rules', []))}")
+        print(f"🔍 StrategyCreateSerializer.validate - Exit rules length: {len(data.get('exit_rules', []))}")
+        
+        # Check that entry rules exist
+        if not data.get('entry_rules'):
+            raise serializers.ValidationError("At least one entry rule is required")
+        
+        # Check that exit rules exist (optional - can use only stop loss and take profit)
+        # if not data.get('exit_rules'):
+        #     raise serializers.ValidationError("At least one exit rule is required")
+        
+        # Validate entry rules
+        for i, rule in enumerate(data['entry_rules']):
+            if rule['rule_type'] == 'condition' and not rule.get('conditions'):
+                raise serializers.ValidationError(f"Entry rule {i+1}: Condition rules must have at least one condition")
+        
+        # Validate exit rules (only if they exist)
+        exit_rules = data.get('exit_rules', [])
+        if exit_rules:
+            for i, rule in enumerate(exit_rules):
+                if rule['rule_type'] == 'condition' and not rule.get('conditions'):
+                    raise serializers.ValidationError(f"Exit rule {i+1}: Condition rules must have at least one condition")
+        
+        print(f"🔍 StrategyCreateSerializer.validate - Validation passed!")
+        return data
 
 
 class EquityCurvePointSerializer(serializers.ModelSerializer):
@@ -80,7 +157,7 @@ class StrategySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules',
             'exit_rules', 'stop_loss_type', 'stop_loss_value', 'take_profit_type',
-            'take_profit_value', 'initial_capital', 'is_active', 'is_public', 'created_at', 'updated_at',
+            'take_profit_value', 'initial_capital', 'status', 'is_active', 'is_public', 'created_at', 'updated_at',
             'backtests', 'backtest_count', 'latest_backtest'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -188,7 +265,7 @@ class StrategySummarySerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'symbol', 'timeframe', 
             'entry_rules', 'exit_rules', 'stop_loss_type', 'stop_loss_value', 
             'take_profit_type', 'take_profit_value', 'initial_capital', 
-            'is_active', 'is_public', 'created_at', 'updated_at', 'created_by',
+            'status', 'is_active', 'is_public', 'created_at', 'updated_at', 'created_by',
             # Backtest metrics
             'win_rate', 'total_trades', 'profit_factor', 'max_drawdown', 
             'sharpe_ratio', 'total_return', 'total_return_percent', 
@@ -220,7 +297,7 @@ class StrategyListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules',
             'exit_rules', 'stop_loss_type', 'stop_loss_value', 'take_profit_type',
-            'take_profit_value', 'initial_capital', 'is_active', 'is_public', 'created_at', 'updated_at',
+            'take_profit_value', 'initial_capital', 'status', 'is_active', 'is_public', 'created_at', 'updated_at',
             'created_by', 'backtest_count', 'latest_backtest',
             # Backtest metrics
             'win_rate', 'total_trades', 'profit_factor', 'max_drawdown', 

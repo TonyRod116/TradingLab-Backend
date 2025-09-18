@@ -17,10 +17,15 @@ import logging
 
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .serializers import (
-    StrategySerializer, StrategyListSerializer, StrategySummarySerializer, BacktestResultSerializer, TradeSerializer,
-    BacktestRequestSerializer, BacktestResponseSerializer, EquityCurvePointSerializer
+    StrategySerializer, StrategyListSerializer, StrategySummarySerializer, StrategyCreateSerializer,
+    BacktestResultSerializer, TradeSerializer, BacktestRequestSerializer, BacktestResponseSerializer, 
+    EquityCurvePointSerializer
 )
 from .backtest_engine import BacktestEngine
+from .enums import (
+    SUPPORTED_SYMBOLS, SUPPORTED_TIMEFRAMES, SUPPORTED_INDICATORS, SUPPORTED_OPERATORS,
+    STOP_LOSS_TYPES, TAKE_PROFIT_TYPES, STRATEGY_STATUS, RULE_TYPES, ACTION_TYPES, LOGICAL_OPERATORS
+)
 
 
 class StrategyPagination(PageNumberPagination):
@@ -38,9 +43,11 @@ class StrategyViewSet(viewsets.ModelViewSet):
     pagination_class = StrategyPagination
     
     def get_serializer_class(self):
-        """Use lightweight serializer for list view"""
+        """Use appropriate serializer based on action"""
         if self.action == 'list':
             return StrategyListSerializer
+        elif self.action == 'create':
+            return StrategyCreateSerializer
         return StrategySerializer
     
     def get_queryset(self):
@@ -109,6 +116,13 @@ class StrategyViewSet(viewsets.ModelViewSet):
         """
         strategy = self.get_object()
         
+        # Check if strategy is ready for backtesting
+        if strategy.status != 'READY':
+            return Response(
+                {'error': f'Strategy must be in READY status to run backtest. Current status: {strategy.status}'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+        
         # Validate request data
         serializer = BacktestRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -164,6 +178,73 @@ class StrategyViewSet(viewsets.ModelViewSet):
             }
             
             return Response(response_data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Backtest failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'])
+    def run_backtest(self, request, pk=None):
+        """
+        Run backtest for a strategy (simplified endpoint)
+        
+        POST /api/strategies/{id}/run_backtest/
+        """
+        strategy = self.get_object()
+        
+        # Check if strategy is ready for backtesting
+        if strategy.status != 'READY':
+            return Response(
+                {'error': f'Strategy must be in READY status to run backtest. Current status: {strategy.status}'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+        
+        # Default backtest parameters
+        backtest_data = {
+            'start_date': request.data.get('start_date', '2020-01-01T00:00:00Z'),
+            'end_date': request.data.get('end_date', '2024-12-31T23:59:59Z'),
+            'initial_capital': request.data.get('initial_capital', strategy.initial_capital),
+            'commission': request.data.get('commission', 4.00),
+            'slippage': request.data.get('slippage', 0.5)
+        }
+        
+        # Validate request data
+        serializer = BacktestRequestSerializer(data=backtest_data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Run backtest
+            backtest_engine = BacktestEngine()
+            backtest_result = backtest_engine.run_backtest(
+                strategy=strategy,
+                start_date=serializer.validated_data['start_date'],
+                end_date=serializer.validated_data['end_date'],
+                initial_capital=serializer.validated_data['initial_capital'],
+                commission=serializer.validated_data['commission'],
+                slippage=serializer.validated_data['slippage']
+            )
+            
+            # Return simplified response
+            return Response({
+                'success': True,
+                'backtest_id': backtest_result.id,
+                'message': 'Backtest completed successfully',
+                'performance': {
+                    'total_return': float(backtest_result.total_return),
+                    'total_return_percent': float(backtest_result.total_return_percent),
+                    'sharpe_ratio': float(backtest_result.sharpe_ratio) if backtest_result.sharpe_ratio else None,
+                    'max_drawdown': float(backtest_result.max_drawdown),
+                    'max_drawdown_percent': float(backtest_result.max_drawdown_percent),
+                    'win_rate': float(backtest_result.win_rate),
+                    'profit_factor': float(backtest_result.profit_factor),
+                    'total_trades': backtest_result.total_trades,
+                    'winning_trades': backtest_result.winning_trades,
+                    'losing_trades': backtest_result.losing_trades
+                }
+            }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
             return Response(
@@ -353,6 +434,26 @@ class StrategyViewSet(viewsets.ModelViewSet):
                 {'error': f'Failed to load community strategies: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=False, methods=['get'], permission_classes=[])
+    def enums(self, request):
+        """
+        Get all supported enums for strategy creation
+        
+        GET /api/strategies/enums/
+        """
+        return Response({
+            'symbols': SUPPORTED_SYMBOLS,
+            'timeframes': SUPPORTED_TIMEFRAMES,
+            'indicators': SUPPORTED_INDICATORS,
+            'operators': SUPPORTED_OPERATORS,
+            'stop_loss_types': STOP_LOSS_TYPES,
+            'take_profit_types': TAKE_PROFIT_TYPES,
+            'strategy_status': STRATEGY_STATUS,
+            'rule_types': RULE_TYPES,
+            'action_types': ACTION_TYPES,
+            'logical_operators': LOGICAL_OPERATORS
+        })
 
 
 class BacktestResultViewSet(viewsets.ReadOnlyModelViewSet):

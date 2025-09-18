@@ -40,6 +40,9 @@ class Strategy(models.Model):
                                         help_text='Initial capital for backtesting')
     
     # Status
+    status = models.CharField(max_length=20, default='DRAFT', 
+                            choices=[('DRAFT', 'Draft'), ('READY', 'Ready'), ('ACTIVE', 'Active'), ('INACTIVE', 'Inactive')],
+                            help_text='Strategy status')
     is_active = models.BooleanField(default=True)
     is_public = models.BooleanField(default=False, help_text='Whether this strategy is public/example for all users')
     created_at = models.DateTimeField(auto_now_add=True)
