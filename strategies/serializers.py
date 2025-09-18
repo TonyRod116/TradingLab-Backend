@@ -54,11 +54,6 @@ class StrategyCreateSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate strategy data"""
-        print(f"🔍 StrategyCreateSerializer.validate - Received data keys: {list(data.keys())}")
-        print(f"🔍 StrategyCreateSerializer.validate - Entry rules: {data.get('entry_rules', [])}")
-        print(f"🔍 StrategyCreateSerializer.validate - Exit rules: {data.get('exit_rules', [])}")
-        print(f"🔍 StrategyCreateSerializer.validate - Exit rules type: {type(data.get('exit_rules', []))}")
-        print(f"🔍 StrategyCreateSerializer.validate - Exit rules length: {len(data.get('exit_rules', []))}")
         
         # Check that entry rules exist
         if not data.get('entry_rules'):
@@ -80,7 +75,6 @@ class StrategyCreateSerializer(serializers.ModelSerializer):
                 if rule['rule_type'] == 'condition' and not rule.get('conditions'):
                     raise serializers.ValidationError(f"Exit rule {i+1}: Condition rules must have at least one condition")
         
-        print(f"🔍 StrategyCreateSerializer.validate - Validation passed!")
         return data
 
 
@@ -388,7 +382,7 @@ class BacktestRequestSerializer(serializers.Serializer):
     end_date = serializers.DateTimeField()
     initial_capital = serializers.DecimalField(max_digits=15, decimal_places=2, required=False)
     commission = serializers.DecimalField(max_digits=10, decimal_places=2, default=Decimal('4.00'))
-    slippage = serializers.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.5'))
+    slippage = serializers.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.25'))
     
     def validate(self, data):
         if data['start_date'] >= data['end_date']:

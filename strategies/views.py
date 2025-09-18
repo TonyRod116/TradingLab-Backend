@@ -207,7 +207,7 @@ class StrategyViewSet(viewsets.ModelViewSet):
             'end_date': request.data.get('end_date', '2024-12-31T23:59:59Z'),
             'initial_capital': request.data.get('initial_capital', strategy.initial_capital),
             'commission': request.data.get('commission', 4.00),
-            'slippage': request.data.get('slippage', 0.5)
+            'slippage': request.data.get('slippage', 0.25)
         }
         
         # Validate request data

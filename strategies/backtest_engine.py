@@ -46,7 +46,7 @@ class BacktestEngine:
     
     def run_backtest(self, strategy: Strategy, start_date: datetime, end_date: datetime,
                     initial_capital: Decimal = None, commission: Decimal = Decimal('4.00'),
-                    slippage: Decimal = Decimal('0.5'), chunk_size: int = 10000) -> BacktestResult:
+                    slippage: Decimal = Decimal('0.25'), chunk_size: int = 10000) -> BacktestResult:
         """
         Run backtest for a strategy
         
@@ -56,7 +56,7 @@ class BacktestEngine:
             end_date: Backtest end date
             initial_capital: Initial capital (uses strategy.initial_capital if None)
             commission: Commission per trade
-            slippage: Slippage percentage
+            slippage: Slippage in points (0.25 = 1 tick)
         
         Returns:
             BacktestResult with performance metrics
@@ -119,8 +119,11 @@ class BacktestEngine:
                 ]
                 Trade.objects.bulk_create(trade_objects)
             
+            # Build equity curve from trades (single source of truth)
+            equity_curve_data = self._build_equity_curve(trades, initial_capital)
+            
             # Save equity curve points in bulk for better performance
-            if equity_points:
+            if equity_curve_data:
                 equity_objects = [
                     EquityCurvePoint(
                         backtest=backtest_result,
@@ -128,7 +131,7 @@ class BacktestEngine:
                         equity_value=point['equity_value'],
                         drawdown=point['drawdown']
                     )
-                    for point in equity_points
+                    for point in equity_curve_data
                 ]
                 EquityCurvePoint.objects.bulk_create(equity_objects)
             
@@ -148,7 +151,7 @@ class BacktestEngine:
             strategy: Strategy to simulate
             initial_capital: Initial capital
             commission: Commission per trade
-            slippage: Slippage percentage
+            slippage: Slippage in points (0.25 = 1 tick)
             chunk_size: Size of chunks for processing large datasets
         
         Returns:
@@ -209,7 +212,7 @@ class BacktestEngine:
                 if self._check_entry_conditions(row, strategy.entry_rules):
                     # Enter position
                     entry_price = self._apply_slippage(current_price, slippage, 'buy')
-                    qty = self._position_size(strategy, row, entry_price)
+                    qty = self._position_size(strategy, row, entry_price, current_equity=portfolio_value)
                     current_position = {
                         'action': 'buy',
                         'entry_price': entry_price,
@@ -219,26 +222,54 @@ class BacktestEngine:
             
             # Check for exit signals
             elif current_position is not None:
-                exit_reason = self._check_exit_conditions(
-                    row, current_position, strategy.exit_rules,
-                    strategy.stop_loss_type, strategy.stop_loss_value,
-                    strategy.take_profit_type, strategy.take_profit_value
+                # Primero verificar si tocamos TP/SL usando high/low
+                signal = self._calc_barrier_exit_price(
+                    row, current_position, strategy.stop_loss_type, strategy.stop_loss_value,
+                    strategy.take_profit_type, strategy.take_profit_value, slippage
                 )
                 
+                if signal:
+                    exit_reason, level_price = signal
+                    exit_price = self._apply_slippage(level_price, slippage, 'sell')
+                else:
+                    # Salida por regla/otras razones (o si no hay TP/SL)
+                    res = self._check_exit_conditions(
+                        row, current_position, strategy.exit_rules,
+                        strategy.stop_loss_type, strategy.stop_loss_value,
+                        strategy.take_profit_type, strategy.take_profit_value,
+                        slippage=slippage, policy="stop_priority"
+                    )
+                    if not res:
+                        self._prev_row_cache = row
+                        # equity curve sampling...
+                        continue
+                    exit_reason, exit_price = res
+                
                 if exit_reason:
-                    # Exit position
-                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
                     
                     # Calculate trade metrics
                     trade_duration = (current_date - current_position['entry_date']).total_seconds() * 1000
                     
-                    # P&L monetario correcto para ES
+                    # P&L monetario correcto para ES (sin doble slippage)
                     side_sign = 1.0 if current_position['action'] == 'buy' else -1.0
                     raw_points = (exit_price - current_position['entry_price']) * side_sign  # en puntos de precio
+                    
+                    
+                    # Sanity guard: detectar trades imposibles
+                    tp_points = self._points_from_spec(str(strategy.take_profit_type), float(strategy.take_profit_value or 0), current_position['entry_price'], 0)
+                    sl_points = self._points_from_spec(str(strategy.stop_loss_type), float(strategy.stop_loss_value or 0), current_position['entry_price'], 0)
+                    max_expected = max(tp_points, sl_points) + 2*float(slippage) + 0.25
+                    
+                    if abs(raw_points) > max_expected + 0.5:
+                        raise RuntimeError(f"Impossible trade: raw_points={raw_points:.2f} max={max_expected:.2f}")
+                    
+                    # ES: 1 punto = $50
                     pnl = raw_points * ES_POINT_VALUE * current_position['quantity']
                     
-                    trade_commission = float(commission)  # si es por round-trip; si es por lado, multiplica por 2
-                    trade_slippage = 0.0                  # ya "metido" en entry/exit
+                    # 👉 comisión por contrato
+                    trade_commission = float(commission) * int(current_position['quantity'])
+                    # Slippage ya incorporado en precios de entrada/salida
+                    trade_slippage = 0.0
                     net_pnl = pnl - trade_commission - trade_slippage
                     
                     # Create trade record
@@ -336,7 +367,7 @@ class BacktestEngine:
             strategy: Strategy to simulate
             initial_capital: Initial capital
             commission: Commission per trade
-            slippage: Slippage percentage
+            slippage: Slippage in points (0.25 = 1 tick)
         
         Returns:
             Tuple of (trades_list, performance_metrics)
@@ -359,7 +390,7 @@ class BacktestEngine:
                 if self._check_entry_conditions(row, strategy.entry_rules):
                     # Enter position
                     entry_price = self._apply_slippage(current_price, slippage, 'buy')
-                    qty = self._position_size(strategy, row, entry_price)
+                    qty = self._position_size(strategy, row, entry_price, current_equity=portfolio_value)
                     current_position = {
                         'action': 'buy',
                         'entry_price': entry_price,
@@ -369,15 +400,15 @@ class BacktestEngine:
             
             # Check for exit signals
             elif current_position is not None:
-                exit_reason = self._check_exit_conditions(
+                res = self._check_exit_conditions(
                     row, current_position, strategy.exit_rules,
                     strategy.stop_loss_type, strategy.stop_loss_value,
-                    strategy.take_profit_type, strategy.take_profit_value
+                    strategy.take_profit_type, strategy.take_profit_value,
+                    slippage=slippage, policy="stop_priority"
                 )
                 
-                if exit_reason:
-                    # Exit position
-                    exit_price = self._apply_slippage(current_price, slippage, 'sell')
+                if res:
+                    exit_reason, exit_price = res
                     
                     # Calculate trade P&L
                     trade_pnl = self._calculate_trade_pnl(
@@ -472,13 +503,13 @@ class BacktestEngine:
         if not operand:
             return float(row['close'])
         
-        # Check if it's a numeric literal
+        op = str(operand).strip().lower()
+
+        # Literal numérico (e.g., "30" en RSI) - PRIORIDAD ALTA
         try:
-            return float(operand)
+            return float(op)
         except (ValueError, TypeError):
             pass
-        
-        op = operand.lower()
 
         # precios
         if op in ('open','high','low','close','volume'):
@@ -535,74 +566,153 @@ class BacktestEngine:
     
     def _check_exit_conditions(self, row: Dict, position: Dict, exit_rules: Dict,
                               stop_loss_type: str, stop_loss_value: Decimal,
-                              take_profit_type: str, take_profit_value: Decimal) -> Optional[str]:
+                              take_profit_type: str, take_profit_value: Decimal,
+                              slippage: Decimal = Decimal('0.25'),
+                              policy: str = "stop_priority") -> Optional[Tuple[str, float]]:
         """
-        Check if exit conditions are met - unified for ES
-        
-        Args:
-            row: Current market data row
-            position: Current position
-            exit_rules: Exit rules configuration
-            stop_loss_type: Stop loss type
-            stop_loss_value: Stop loss value
-            take_profit_type: Take profit type
-            take_profit_value: Take profit value
-        
-        Returns:
-            Exit reason if conditions are met, None otherwise
+        Devuelve (exit_reason, exit_price) si hay salida, o None.
+        policy: "stop_priority" | "target_priority"
         """
-        current_price = float(row['close'])
         entry_price = float(position['entry_price'])
-        side_sign = 1.0 if position['action'] == 'buy' else -1.0
+        side = position['action']  # 'buy'/'sell'
+        s = float(slippage or 0.0)
 
-        # puntos recorridos desde la entrada (positivo si va a favor de la posición)
-        moved_points = (current_price - entry_price) * side_sign
-
-        # objetivos en puntos
+        # Objetivos en puntos (ES)
         atr_val = float(row.get("atr") or 0.0)
         tp_points = self._points_from_spec(str(take_profit_type), float(take_profit_value or 0), entry_price, atr_val)
         sl_points = self._points_from_spec(str(stop_loss_type), float(stop_loss_value or 0), entry_price, atr_val)
 
-        # take profit primero
-        if tp_points > 0 and moved_points >= tp_points:
-            return "Take Profit"
+        if tp_points <= 0 and sl_points <= 0 and not exit_rules:
+            return None
 
-        # stop loss
-        if sl_points > 0 and moved_points <= -sl_points:
-            return "Stop Loss"
+        hi = float(row.get('high', row['close']))
+        lo = float(row.get('low', row['close']))
 
-        # reglas de salida adicionales
+        if side == 'buy':
+            tp_price = entry_price + tp_points if tp_points > 0 else float('inf')
+            sl_price = entry_price - sl_points if sl_points > 0 else -float('inf')
+
+            hit_tp = (tp_points > 0) and (hi >= tp_price)
+            hit_sl = (sl_points > 0) and (lo <= sl_price)
+
+            if hit_tp or hit_sl:
+                if hit_tp and hit_sl:
+                    first = 'Stop Loss' if policy == 'stop_priority' else 'Take Profit'
+                elif hit_tp:
+                    first = 'Take Profit'
+                else:
+                    first = 'Stop Loss'
+
+                # Aplica slippage por lado
+                if first == 'Take Profit':
+                    exit_px = (tp_price - s)  # sell -> precio peor
+                else:
+                    exit_px = (sl_price - s)  # sell -> precio peor
+
+                return first, exit_px
+
+        else:  # side == 'sell' (por si añades cortos en el futuro)
+            tp_price = entry_price - tp_points if tp_points > 0 else -float('inf')
+            sl_price = entry_price + sl_points if sl_points > 0 else float('inf')
+
+            hit_tp = (tp_points > 0) and (lo <= tp_price)
+            hit_sl = (sl_points > 0) and (hi >= sl_price)
+
+            if hit_tp or hit_sl:
+                if hit_tp and hit_sl:
+                    first = 'Stop Loss' if policy == 'stop_priority' else 'Take Profit'
+                elif hit_tp:
+                    first = 'Take Profit'
+                else:
+                    first = 'Stop Loss'
+
+                if first == 'Take Profit':
+                    exit_px = (tp_price + s)  # buy-to-cover -> peor
+                else:
+                    exit_px = (sl_price + s)
+
+                return first, exit_px
+
+        # Reglas de salida extra (a precio de cierre + slippage)
         if exit_rules:
             rules = exit_rules if isinstance(exit_rules, list) else [exit_rules]
             for rule in rules:
                 if rule.get('rule_type') == 'condition' and rule.get('action_type') == 'sell':
                     if self._evaluate_rule_conditions(row, rule.get('conditions', [])):
-                        return f"Exit Rule: {rule.get('name', 'Unknown')}"
+                        # Cierre por regla a close
+                        if side == 'buy':
+                            exit_px = float(row['close']) - s
+                        else:
+                            exit_px = float(row['close']) + s
+                        return f"Exit Rule: {rule.get('name', 'Unknown')}", exit_px
 
         return None
     
+    def _calc_barrier_exit_price(self, row, position, stop_loss_type, stop_loss_value,
+                                 take_profit_type, take_profit_value, slippage) -> tuple[str, float] | None:
+        """
+        Devuelve (reason, exit_price_sin_slippage) si toca TP/SL en esta vela usando high/low.
+        Para long: stop primero por prudencia (configurable).
+        """
+        entry = float(position['entry_price'])
+        side = 1.0 if position['action'] == 'buy' else -1.0
+        high = float(row['high'])
+        low = float(row['low'])
+        atr_val = float(row.get("atr") or 0.0)
+
+        tp_pts = self._points_from_spec(str(take_profit_type), float(take_profit_value or 0), entry, atr_val)
+        sl_pts = self._points_from_spec(str(stop_loss_type), float(stop_loss_value or 0), entry, atr_val)
+
+        if position['action'] == 'buy':
+            tp_price = entry + (tp_pts if tp_pts > 0 else 0)
+            sl_price = entry - (sl_pts if sl_pts > 0 else 0)
+
+            hit_tp = (tp_pts > 0) and (high >= tp_price)
+            hit_sl = (sl_pts > 0) and (low <= sl_price)
+
+            if hit_tp and hit_sl:
+                # Política conservadora: Stop primero
+                return ("Stop Loss", sl_price)
+            if hit_sl:
+                return ("Stop Loss", sl_price)
+            if hit_tp:
+                return ("Take Profit", tp_price)
+
+        else:  # short
+            tp_price = entry - (tp_pts if tp_pts > 0 else 0)
+            sl_price = entry + (sl_pts if sl_pts > 0 else 0)
+
+            hit_tp = (tp_pts > 0) and (low <= tp_price)
+            hit_sl = (sl_pts > 0) and (high >= sl_price)
+
+            if hit_tp and hit_sl:
+                return ("Stop Loss", sl_price)
+            if hit_sl:
+                return ("Stop Loss", sl_price)
+            if hit_tp:
+                return ("Take Profit", tp_price)
+
+        return None  # no barrier touch
+    
     def _apply_slippage(self, price: float, slippage: Decimal, action: str) -> float:
         """
-        Apply slippage to price
+        Slippage expresado en PUNTOS ES, no porcentaje.
+        Ej.: 0.25 = 1 tick; 0.5 = 2 ticks.
         
         Args:
             price: Original price
-            slippage: Slippage percentage
+            slippage: Slippage in points (not percentage)
             action: Buy or sell action
         
         Returns:
             Price with slippage applied
         """
-        slippage_factor = float(slippage) / 100
-        
-        if action == 'buy':
-            return price * (1 + slippage_factor)
-        else:
-            return price * (1 - slippage_factor)
+        s = float(slippage or 0.0)
+        return price + s if action == 'buy' else price - s
     
     def _calculate_trade_pnl(self, position: Dict, exit_price: float, commission: Decimal) -> Dict:
         """
-        Calculate trade P&L
+        Calculate trade P&L for ES (consistent with main engine)
         
         Args:
             position: Position details
@@ -612,41 +722,28 @@ class BacktestEngine:
         Returns:
             Dictionary with gross and net P&L
         """
+        ES_POINT_VALUE = 50.0
         entry_price = float(position['entry_price'])
-        quantity = position['quantity']
-        
-        if position['action'] == 'buy':
-            gross_pnl = (exit_price - entry_price) * quantity
-        else:
-            gross_pnl = (entry_price - exit_price) * quantity
-        
+        qty = int(position['quantity'])
+
+        side_sign = 1.0 if position['action'] == 'buy' else -1.0
+        raw_points = (exit_price - entry_price) * side_sign
+        gross_pnl = raw_points * ES_POINT_VALUE * qty
+
+        # Comisión por round-turn; si fuese por lado, multiplica por 2
         net_pnl = gross_pnl - float(commission)
-        
-        return {
-            'gross_pnl': gross_pnl,
-            'net_pnl': net_pnl
-        }
+
+        return {'gross_pnl': gross_pnl, 'net_pnl': net_pnl}
     
     def _safe_decimal(self, value):
         """Safely convert value to Decimal, handling inf and None values"""
         if value is None:
             return None
         if isinstance(value, (int, float)):
-            if value == float('inf') or value == float('-inf'):
-                return Decimal('0')  # Convert inf to 0 for database storage
-            if np.isnan(value):
-                return Decimal('0')  # Convert NaN to 0
-            # Limit values to prevent database overflow (max 999999.9999)
-            if abs(value) > 999999:
-                value = 999999 if value > 0 else -999999
+            if value in (float('inf'), float('-inf')) or np.isnan(value):
+                return Decimal('0')
         try:
-            decimal_value = Decimal(str(value))
-            # Additional check for decimal precision
-            if decimal_value > Decimal('999999.9999'):
-                return Decimal('999999.9999')
-            elif decimal_value < Decimal('-999999.9999'):
-                return Decimal('-999999.9999')
-            return decimal_value
+            return Decimal(str(value))
         except (ValueError, TypeError, OverflowError):
             return Decimal('0')
 
@@ -970,23 +1067,120 @@ class BacktestEngine:
         if k == "ticks":
             return value * ES_TICK
         if k == "atr":
-            return (atr or 0.0) * value
+            if atr and atr > 0:
+                return atr * value
+            else:
+                # Fallback to points if ATR not available
+                return value
         return 0.0
     
-    def _position_size(self, strategy, row, entry_price):
-        """Calculate position size based on fixed risk percentage"""
-        risk_pct = 0.01  # 1% risk per trade
-        stop_type = getattr(strategy, "stop_loss_type", "percentage")
+    def _position_size(self, strategy, row, entry_price, current_equity: float):
+        """Calculate position size based on fixed risk percentage with realistic limits (compounding)"""
+        ES_POINT_VALUE = 50.0
+        MAX_CONTRACTS = 5       # ↓ de 20 a 5
+        risk_pct = 0.005        # ↓ de 1% a 0.5%
+
+        stop_type = (getattr(strategy, "stop_loss_type", "points") or "points").lower()
         stop_val = float(getattr(strategy, "stop_loss_value", 0) or 0)
+
         if stop_val <= 0:
             return 1
 
-        atr_val = float(row.get("atr") or 0.0)
-        sl_points = self._points_from_spec(stop_type, stop_val, entry_price, atr_val)
-        if sl_points <= 0:
+        # Convertir stop a puntos ES
+        ES_TICK = 0.25
+        if stop_type == "percentage":
+            sl_points = entry_price * (stop_val / 100.0)
+        elif stop_type == "points":
+            sl_points = stop_val
+        elif stop_type == "ticks":
+            sl_points = stop_val * ES_TICK
+        else:
+            sl_points = stop_val  # fallback defensivo
+
+        # Validación adicional
+        if sl_points <= 0 or sl_points > 50:  # Stop loss máximo 50 puntos
             return 1
 
         per_contract_risk = sl_points * ES_POINT_VALUE
-        budget = float(strategy.initial_capital) * risk_pct
+        if per_contract_risk <= 0:
+            return 1
+
+        # 👉 Compounding: usa el equity actual, no el inicial
+        budget = float(current_equity) * risk_pct
         qty = max(1, int(budget // per_contract_risk))
-        return qty
+        return min(qty, MAX_CONTRACTS)
+    
+    def _build_equity_curve(self, trades, initial_capital):
+        """Build equity curve from trades (single source of truth)"""
+        if not trades:
+            return []
+        
+        equity_points = []
+        equity = float(initial_capital)
+        peak_value = equity
+        max_drawdown = 0.0
+        
+        for trade in trades:
+            # Update equity with trade P&L
+            equity += float(trade['net_pnl'])
+            
+            # Update peak and drawdown
+            if equity > peak_value:
+                peak_value = equity
+            
+            current_drawdown = (peak_value - equity) / peak_value if peak_value > 0 else 0
+            if current_drawdown > max_drawdown:
+                max_drawdown = current_drawdown
+            
+            equity_points.append({
+                'timestamp': trade['exit_date'],
+                'equity_value': equity,
+                'drawdown': current_drawdown
+            })
+        
+        return equity_points
+    
+    def _compute_returns(self, equity_points):
+        """Compute returns from equity curve"""
+        if len(equity_points) < 2:
+            return np.array([])
+        
+        rets = []
+        for i in range(1, len(equity_points)):
+            prev = float(equity_points[i-1]["equity_value"])
+            cur = float(equity_points[i]["equity_value"])
+            if prev > 0:
+                rets.append((cur - prev) / prev)
+        return np.array(rets, dtype=float)
+    
+    def _daily_factor(self, timeframe: str) -> float:
+        """Factor de anualización según timeframe"""
+        tf = timeframe.lower()
+        if tf in ("1m","5m","15m","30m"):
+            bars_per_day = {"1m":390, "5m":78, "15m":26, "30m":13}[tf]
+        elif tf in ("1h","4h"):
+            bars_per_day = {"1h":6, "4h":1.5}[tf]
+        elif tf in ("1d", "1w"):
+            bars_per_day = {"1d":1, "1w":1/5}[tf]
+        else:
+            bars_per_day = 1
+        return bars_per_day
+    
+    def _risk_metrics(self, equity_points, timeframe):
+        """Calculate Sharpe, Sortino, and Calmar ratios"""
+        rets = self._compute_returns(equity_points)
+        if len(rets) < 2:
+            return None, None, None
+        
+        mean = np.mean(rets)
+        std = np.std(rets, ddof=1)
+        downside = rets[rets < 0]
+        downside_std = np.std(downside, ddof=1) if len(downside) > 1 else 0.0
+        
+        f = self._daily_factor(timeframe)
+        ann = np.sqrt(252 * f)
+        
+        sharpe = (mean/std)*ann if std > 0 else None
+        sortino = (mean/downside_std)*ann if downside_std > 0 else None
+        
+        return sharpe, sortino

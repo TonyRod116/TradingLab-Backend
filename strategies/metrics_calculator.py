@@ -158,11 +158,9 @@ def calculate_max_drawdown(equity_curve: pd.Series, initial_capital: float) -> T
         return 0.0, 0.0
     
     peak = equity_curve.expanding().max()
-    drawdown = (equity_curve - peak) / peak
-    max_dd = drawdown.min()
-    
-    max_dd_dollars = float(max_dd * initial_capital)
-    max_dd_percent = float(max_dd * 100)
+    dd_series = (equity_curve - peak) / peak
+    max_dd_percent = float(dd_series.min() * 100)
+    max_dd_dollars = float((peak - equity_curve).max())
     
     return max_dd_dollars, max_dd_percent
 
