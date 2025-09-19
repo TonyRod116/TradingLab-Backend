@@ -14,52 +14,15 @@ import os
 # Agregar el directorio padre al path para importar nuestros módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gpt_parser import GPTQuantConnectParser
 
 class QuantConnectView(APIView):
     permission_classes = []  # Sin autenticación requerida para QuantConnect
 
-class ParseNaturalLanguageView(QuantConnectView):
-    def post(self, request):
-        try:
-            description = request.data.get('description', '')
-            backtest_params = request.data.get('backtest_params', {})
-            
-            # Usar el nuevo parser GPT
-            parser = GPTQuantConnectParser()
-            python_code = parser.parse_strategy_description(description, backtest_params)
-            
-            if not python_code:
-                return Response({
-                    'success': False,
-                    'error': 'Failed to parse strategy description'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Análisis de complejidad de la estrategia
-            strategy_analysis = parser.analyze_strategy_complexity(description)
-            
-            # Generar project_id único
-            project_id = f"strategy_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            return Response({
-                'success': True,
-                'python_code': python_code,
-                'project_id': project_id,
-                'strategy_analysis': strategy_analysis,
-                'message': 'Strategy parsed successfully using GPT'
-            })
-            
-        except Exception as e:
-            return Response({
-                'success': False,
-                'error': f'Parsing error: {str(e)}'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
 class StrategyTemplatesView(QuantConnectView):
     def get(self, request):
-        parser = GPTQuantConnectParser()
-        templates = parser.generate_strategy_templates()
-        return Response(templates)
+        # Return empty templates since GPT parser is removed
+        return Response([])
 
 class FavoritesView(QuantConnectView):
     def get(self, request):
@@ -803,7 +766,6 @@ def check_progress(request):
         }, status=500)
 
 # Asignar las vistas a las funciones para compatibilidad con URLs
-parse_natural_language = ParseNaturalLanguageView.as_view()
 get_strategy_templates = StrategyTemplatesView.as_view()
 get_favorites = FavoritesView.as_view()
 health_check = HealthCheckView.as_view()

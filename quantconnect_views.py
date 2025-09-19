@@ -53,28 +53,6 @@ def run_complete_workflow(request):
     }, status=503)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def parse_natural_language(request):
-    """
-    Parse natural language strategy - Temporarily disabled
-    """
-    return JsonResponse({
-        'success': False,
-        'error': 'QuantConnect service temporarily disabled for maintenance'
-    }, status=503)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def create_and_compile_strategy(request):
-    """
-    Create and compile strategy - Temporarily disabled
-    """
-    return JsonResponse({
-        'success': False,
-        'error': 'QuantConnect service temporarily disabled for maintenance'
-    }, status=503)
 
 
 @csrf_exempt

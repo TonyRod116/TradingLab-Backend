@@ -4,8 +4,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from quantconnect_views import (
     test_quantconnect_auth, test_project_creation, create_project, run_complete_workflow,
-    parse_natural_language, create_and_compile_strategy, compile_project,
-    read_compilation_result, create_file
+    compile_project, read_compilation_result, create_file
 )
 
 urlpatterns = [
@@ -29,9 +28,6 @@ urlpatterns = [
     path('api/quantconnect/create-project/', create_project, name='quantconnect_create_project'),
     path('api/quantconnect/run-backtest/', run_complete_workflow, name='quantconnect_run_backtest'),
     
-    # Natural Language Processing endpoints
-    path('api/quantconnect/parse-natural-language/', parse_natural_language, name='quantconnect_parse_natural'),
-    path('api/quantconnect/create-and-compile-strategy/', create_and_compile_strategy, name='quantconnect_create_compile'),
     
     # Compilation endpoints
     path('api/quantconnect/compile-project/', compile_project, name='quantconnect_compile_project'),

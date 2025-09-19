@@ -4,7 +4,6 @@ import time
 import requests
 import json
 from typing import Dict, Any, Optional
-from .quantconnect_parser import QuantConnectNaturalLanguageParser
 
 
 class QuantConnectService:
@@ -16,7 +15,6 @@ class QuantConnectService:
         self.base_url = 'https://www.quantconnect.com/api/v2'
         self.user_id = 414810
         self.api_token = '79b91dd67dbbbfa4129888180d2de06d773de7eb4c8df86761bb7926d0d6d8cf'
-        self.parser = QuantConnectNaturalLanguageParser()
     
     def _generate_auth_headers(self) -> Dict[str, str]:
         """
@@ -157,13 +155,11 @@ class QuantConnectService:
             
             project_id = project_result['data']['projects'][0]['projectId']
             
-            # Step 2: Generate strategy code using natural language parser
-            if description:
-                strategy_code = self.parser.parse_strategy_description(description, strategy_data)
-            elif strategy_data:
-                strategy_code = self.parser.parse_advanced_strategy(strategy_data)
+            # Step 2: Generate basic strategy code (Natural Language parsing removed)
+            if strategy_data:
+                strategy_code = self._generate_basic_strategy_code(strategy_data)
             else:
-                strategy_code = self.parser._generate_default_code()
+                strategy_code = self._generate_default_code()
             
             # Step 3: Create main.py file in the project
             file_result = self.create_file(project_id, 'main.py', strategy_code)
@@ -251,47 +247,17 @@ class QuantConnectService:
             'error': 'Compilation timeout - maximum attempts reached'
         }
     
-    def parse_natural_language_strategy(self, description: str, strategy_data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Parse natural language strategy description to QuantConnect code
-        """
-        try:
-            if not description:
-                return {
-                    'success': False,
-                    'error': 'Description is required'
-                }
-            
-            # Parse the description to generate code
-            strategy_code = self.parser.parse_strategy_description(description, strategy_data)
-            
-            return {
-                'success': True,
-                'data': {
-                    'strategyCode': strategy_code,
-                    'description': description,
-                    'message': 'Strategy parsed successfully'
-                }
-            }
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f'Parsing error: {str(e)}'
-            }
     
     def create_and_compile_strategy(self, description: str, strategy_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Create project, parse strategy, and compile in one step
         """
         try:
-            # Parse the strategy first
-            parse_result = self.parse_natural_language_strategy(description, strategy_data)
-            
-            if not parse_result['success']:
-                return parse_result
-            
-            strategy_code = parse_result['data']['strategyCode']
+            # Generate basic strategy code (Natural Language parsing removed)
+            if strategy_data:
+                strategy_code = self._generate_basic_strategy_code(strategy_data)
+            else:
+                strategy_code = self._generate_default_code()
             
             # Create project
             project_name = f'Strategy_{int(time.time())}'
