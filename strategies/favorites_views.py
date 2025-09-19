@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import Strategy, Favorite
-from .serializers import StrategySummarySerializer
+from .serializers import StrategySummarySerializer, FavoritesOptimizedSerializer
 
 
 class FavoritesListView(APIView):
@@ -15,13 +15,14 @@ class FavoritesListView(APIView):
         """Obtener todas las estrategias favoritas del usuario"""
         try:
             # Obtener todos los favoritos del usuario con la estrategia y su usuario
-            favorites = Favorite.objects.filter(user=request.user).select_related('strategy', 'strategy__user')
+            # Usar prefetch_related para optimizar las consultas de backtests
+            favorites = Favorite.objects.filter(user=request.user).select_related('strategy', 'strategy__user').prefetch_related('strategy__backtests')
             
             # Extraer las estrategias de los favoritos
             strategies = [favorite.strategy for favorite in favorites]
             
-            # Usar el mismo serializer que Community Backtests para consistencia
-            serializer = StrategySummarySerializer(strategies, many=True, context={'request': request})
+            # Usar el serializer optimizado para favoritos (más rápido)
+            serializer = FavoritesOptimizedSerializer(strategies, many=True, context={'request': request})
             
             return Response({
                 'success': True,

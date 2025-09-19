@@ -502,3 +502,111 @@ class BacktestResponseSerializer(serializers.Serializer):
     performance = serializers.DictField(read_only=True)
     summary = serializers.DictField(read_only=True)
     timestamp = serializers.DateTimeField(read_only=True)
+
+
+class FavoritesOptimizedSerializer(serializers.ModelSerializer):
+    """Optimized serializer for favorites - minimal data for fast loading"""
+    
+    created_by = serializers.CharField(source='user.username', read_only=True)
+    
+    # Only essential backtest metrics
+    win_rate = serializers.SerializerMethodField()
+    total_trades = serializers.SerializerMethodField()
+    profit_factor = serializers.SerializerMethodField()
+    total_return_percent = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    rating_color = serializers.SerializerMethodField()
+    
+    def get_win_rate(self, obj):
+        """Get win_rate from latest backtest as percentage"""
+        latest_backtest = obj.backtests.first()
+        if latest_backtest and latest_backtest.win_rate is not None:
+            return float(latest_backtest.win_rate) * 100
+        return None
+    
+    def get_total_trades(self, obj):
+        """Get total_trades from latest backtest"""
+        latest_backtest = obj.backtests.first()
+        if latest_backtest and latest_backtest.total_trades is not None:
+            return latest_backtest.total_trades
+        return None
+    
+    def get_profit_factor(self, obj):
+        """Get profit_factor from latest backtest"""
+        latest_backtest = obj.backtests.first()
+        if latest_backtest and latest_backtest.profit_factor is not None:
+            return float(latest_backtest.profit_factor)
+        return None
+    
+    def get_total_return_percent(self, obj):
+        """Get total_return_percent from latest backtest"""
+        latest_backtest = obj.backtests.first()
+        if latest_backtest and latest_backtest.total_return is not None and latest_backtest.initial_capital:
+            return (float(latest_backtest.total_return) / float(latest_backtest.initial_capital)) * 100
+        return None
+    
+    def get_rating(self, obj):
+        """Calculate rating based on multiple metrics"""
+        latest_backtest = obj.backtests.first()
+        if not latest_backtest:
+            return None
+        
+        win_rate = latest_backtest.win_rate
+        profit_factor = latest_backtest.profit_factor
+        
+        if win_rate is None or profit_factor is None:
+            return None
+        
+        win_rate_pct = float(win_rate) * 100
+        rating = 0
+        
+        # Win rate component (0-2.5 points)
+        if win_rate_pct >= 60:
+            rating += 2.5
+        elif win_rate_pct >= 50:
+            rating += 2.0
+        elif win_rate_pct >= 40:
+            rating += 1.5
+        elif win_rate_pct >= 30:
+            rating += 1.0
+        else:
+            rating += 0.5
+        
+        # Profit factor component (0-2.5 points)
+        if profit_factor >= 2.0:
+            rating += 2.5
+        elif profit_factor >= 1.5:
+            rating += 2.0
+        elif profit_factor >= 1.2:
+            rating += 1.5
+        elif profit_factor >= 1.0:
+            rating += 1.0
+        else:
+            rating += 0.5
+        
+        return round(rating, 1)
+    
+    def get_rating_color(self, obj):
+        """Get color based on rating"""
+        rating = self.get_rating(obj)
+        if rating is None:
+            return 'gray'
+        
+        if rating >= 4.0:
+            return 'green'
+        elif rating >= 3.0:
+            return 'yellow'
+        elif rating >= 2.0:
+            return 'orange'
+        else:
+            return 'red'
+    
+    class Meta:
+        model = Strategy
+        fields = [
+            'id', 'name', 'description', 'symbol', 'timeframe', 'entry_rules',
+            'exit_rules', 'initial_capital', 'status', 'is_active', 'is_public', 
+            'created_at', 'created_by',
+            'win_rate', 'total_trades', 'profit_factor', 'total_return_percent', 
+            'rating', 'rating_color'
+        ]
