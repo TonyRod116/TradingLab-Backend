@@ -82,3 +82,6 @@ if __name__ == '__main__':
         print(f"\n💥 Error durante la verificación: {e}")
         import traceback
         traceback.print_exc()
+
+
+

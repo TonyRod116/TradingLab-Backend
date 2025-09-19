@@ -24,3 +24,6 @@ echo "💡 Ahora puedes usar: ./run_postgresql.sh"
 
 
 
+
+
+
