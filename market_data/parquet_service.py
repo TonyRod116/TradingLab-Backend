@@ -90,13 +90,21 @@ class ParquetDataService:
             
             # Apply date filters
             if start_date:
-                # Convert to pandas Timestamp for comparison
+                # Convert to pandas Timestamp for comparison, handling timezone
                 start_ts = pd.Timestamp(start_date)
+                if df['date'].dt.tz is not None and start_ts.tz is None:
+                    start_ts = start_ts.tz_localize('UTC')
+                elif df['date'].dt.tz is None and start_ts.tz is not None:
+                    start_ts = start_ts.tz_localize(None)
                 df = df[df['date'] >= start_ts]
             
             if end_date:
-                # Convert to pandas Timestamp for comparison
+                # Convert to pandas Timestamp for comparison, handling timezone
                 end_ts = pd.Timestamp(end_date)
+                if df['date'].dt.tz is not None and end_ts.tz is None:
+                    end_ts = end_ts.tz_localize('UTC')
+                elif df['date'].dt.tz is None and end_ts.tz is not None:
+                    end_ts = end_ts.tz_localize(None)
                 df = df[df['date'] <= end_ts]
             
             # Apply limit

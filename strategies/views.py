@@ -413,13 +413,13 @@ class StrategyViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[])
     def community(self, request):
         """
-        Get all strategies from all users for community view (no authentication required)
+        Get public strategies from all users for community view (no authentication required)
         
         GET /api/strategies/community/
         """
         try:
-            # Get ALL strategies from all users for community view
-            strategies = Strategy.objects.all().prefetch_related('backtests').select_related('user').order_by('-created_at')
+            # Get only PUBLIC strategies from all users for community view
+            strategies = Strategy.objects.filter(is_public=True).prefetch_related('backtests').select_related('user').order_by('-created_at')
             
             # Serialize with summary data
             serializer = StrategySummarySerializer(strategies, many=True)
@@ -463,7 +463,7 @@ class BacktestResultViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return BacktestResult.objects.filter(user=self.request.user)
+        return BacktestResult.objects.filter(strategy__user=self.request.user)
     
     @action(detail=True, methods=['get'])
     def trades(self, request, pk=None):

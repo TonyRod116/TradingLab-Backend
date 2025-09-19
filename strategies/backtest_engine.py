@@ -26,7 +26,7 @@ INDICATOR_PATTERNS = {
     r'^ema_(\d+)$':        'ema',
     r'^rsi(?:_(\d+))?$':   'rsi',        # rsi, rsi_20, rsi_30...
     r'^vwap$':             'vwap',
-    r'^vwap_(plus|minus)_(\d+_\d)$': 'vwap_band',   # vwap_plus_1_5 (1.5σ)
+    r'^vwap_(plus|minus)_(\d+\.\d+)$': 'vwap_band',   # vwap_plus_2_0 (2.0σ)
     r'^bb_(upper|middle|lower)(?:_(\d+))?$': 'bb',   # bb_upper, bb_middle, bb_lower(_20)
     r'^macd$':             'macd',
     r'^macd_signal$':      'macd_signal',
@@ -97,18 +97,23 @@ class BacktestEngine:
             # Calculate execution time
             execution_time = time.time() - start_time
             
-            # Create backtest result
+            # Create backtest result - only use fields that exist in the model
             backtest_result = BacktestResult.objects.create(
                 strategy=strategy,
-                user=strategy.user,
                 start_date=start_date,
                 end_date=end_date,
                 initial_capital=initial_capital,
                 commission=commission,
                 slippage=slippage,
-                execution_time=execution_time,
-                data_source=data_source,
-                **performance
+                total_return=performance.get('total_return') or 0,
+                annualized_return=performance.get('annualized_return') or 0,
+                sharpe_ratio=performance.get('sharpe_ratio') or 0,
+                max_drawdown=performance.get('max_drawdown') or 0,
+                win_rate=performance.get('win_rate') or 0,
+                profit_factor=performance.get('profit_factor') or 0,
+                total_trades=performance.get('total_trades', 0),
+                winning_trades=performance.get('winning_trades', 0),
+                losing_trades=performance.get('losing_trades', 0)
             )
             
             # Save trades in bulk for better performance
@@ -128,7 +133,7 @@ class BacktestEngine:
                     EquityCurvePoint(
                         backtest=backtest_result,
                         timestamp=point['timestamp'],
-                        equity_value=point['equity_value'],
+                        equity=point['equity_value'],
                         drawdown=point['drawdown']
                     )
                     for point in equity_curve_data
@@ -530,7 +535,7 @@ class BacktestEngine:
         # vwap y bandas
         if op == 'vwap':
             return float(row.get('vwap', row['close']))
-        m = re.match(r'^vwap_(plus|minus)_(\d+_\d)$', op)
+        m = re.match(r'^vwap_(plus|minus)_(\d+\.\d+)$', op)
         if m:
             col = f"vwap_{m.group(1)}_{m.group(2)}"
             return float(row.get(col, row['close']))
@@ -1019,7 +1024,7 @@ class BacktestEngine:
                 std = tp.rolling(window, min_periods=window//5).std()
                 for sign, s in vwap_sigmas:
                     band = df["vwap"] + (std * s if sign == "plus" else -std * s)
-                    df[f"vwap_{sign}_{str(s).replace('.','_')}"] = band
+                    df[f"vwap_{sign}_{s}"] = band
 
         # Bollinger Bands (sobre close)
         if need_bb:
