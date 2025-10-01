@@ -5,7 +5,7 @@ Advanced metrics calculator for backtesting results
 import numpy as np
 import pandas as pd
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 
 
