@@ -9,6 +9,10 @@ from .favorites_views import (
     FavoritesListView, ToggleFavoriteView, AddFavoriteView, 
     RemoveFavoriteView, CheckFavoriteView
 )
+from .optimization_views import (
+    GridSearchOptimizationView, WalkForwardOptimizationView,
+    AvailableIndicatorsView, StrategyOptimizationView, OptimizationStatusView
+)
 
 router = DefaultRouter()
 router.register('', StrategyViewSet, basename='strategy')
@@ -22,6 +26,13 @@ urlpatterns = [
     path('<int:strategy_id>/add-favorite/', AddFavoriteView.as_view(), name='add-favorite'),
     path('<int:strategy_id>/remove-favorite/', RemoveFavoriteView.as_view(), name='remove-favorite'),
     path('<int:strategy_id>/check-favorite/', CheckFavoriteView.as_view(), name='check-favorite'),
+    
+    # Optimization endpoints
+    path('optimization/grid-search/', GridSearchOptimizationView.as_view(), name='grid-search-optimization'),
+    path('optimization/walk-forward/', WalkForwardOptimizationView.as_view(), name='walk-forward-optimization'),
+    path('optimization/indicators/', AvailableIndicatorsView.as_view(), name='available-indicators'),
+    path('optimization/create-strategy/', StrategyOptimizationView.as_view(), name='create-optimized-strategy'),
+    path('optimization/status/', OptimizationStatusView.as_view(), name='optimization-status'),
     
     path('', include(router.urls)),
 ]

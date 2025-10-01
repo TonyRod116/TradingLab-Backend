@@ -350,3 +350,149 @@ def create_empty_metrics(initial_capital: float) -> Dict:
         'trades_per_month': None,
         'expectancy': None,
     }
+
+
+def calculate_advanced_metrics(equity_curve: pd.Series, trades_data: List[Dict], 
+                              risk_free_rate: float = 0.0) -> Dict[str, Any]:
+    """
+    Calculate advanced metrics from engine_v2.py integration
+    
+    Args:
+        equity_curve: Equity curve as pandas Series
+        trades_data: List of trade dictionaries
+        risk_free_rate: Risk-free rate for calculations
+    
+    Returns:
+        Dictionary with advanced metrics
+    """
+    if len(equity_curve) < 2:
+        return {}
+    
+    ret = equity_curve.pct_change().fillna(0.0)
+    
+    # Calculate time period
+    if (equity_curve.index[-1] - equity_curve.index[0]).days <= 0:
+        years = 1.0
+    else:
+        years = (equity_curve.index[-1] - equity_curve.index[0]).days / 365.25
+    
+    # Basic performance metrics
+    total_return = equity_curve.iloc[-1] / equity_curve.iloc[0] - 1.0
+    cagr = (1 + total_return) ** (1 / years) - 1 if years > 0 else total_return
+    vol = ret.std() * np.sqrt(252)
+    sharpe = (ret.mean() * 252 - risk_free_rate) / vol if vol > 0 else 0.0
+    
+    # Drawdown calculation
+    peak = equity_curve.cummax()
+    dd = (equity_curve / peak - 1.0)
+    maxdd = dd.min()
+    
+    # Advanced trade-based metrics
+    if trades_data:
+        pnls = [t.get("pnl", 0) for t in trades_data]
+        winning_trades = [p for p in pnls if p > 0]
+        losing_trades = [p for p in pnls if p < 0]
+        
+        win_rate = len(winning_trades) / len(trades_data) if trades_data else 0
+        avg_win = np.mean(winning_trades) if winning_trades else 0
+        avg_loss = np.mean(losing_trades) if losing_trades else 0
+        profit_factor = abs(sum(winning_trades) / sum(losing_trades)) if losing_trades and sum(losing_trades) != 0 else float('inf')
+        expectancy = np.mean(pnls) if pnls else 0
+        avg_trade = expectancy  # Alias for compatibility
+        
+        largest_win = max(winning_trades) if winning_trades else 0
+        largest_loss = min(losing_trades) if losing_trades else 0
+        
+        # Consecutive wins/losses
+        consecutive_wins = 0
+        consecutive_losses = 0
+        max_consecutive_wins = 0
+        max_consecutive_losses = 0
+        
+        for pnl in pnls:
+            if pnl > 0:
+                consecutive_wins += 1
+                consecutive_losses = 0
+                max_consecutive_wins = max(max_consecutive_wins, consecutive_wins)
+            else:
+                consecutive_losses += 1
+                consecutive_wins = 0
+                max_consecutive_losses = max(max_consecutive_losses, consecutive_losses)
+    else:
+        win_rate = 0
+        avg_win = 0
+        avg_loss = 0
+        profit_factor = 0
+        expectancy = 0
+        avg_trade = 0
+        largest_win = 0
+        largest_loss = 0
+        max_consecutive_wins = 0
+        max_consecutive_losses = 0
+    
+    return {
+        "Total Return": total_return,
+        "Total Return %": total_return * 100,
+        "CAGR": cagr,
+        "CAGR %": cagr * 100,
+        "Sharpe Ratio": sharpe,
+        "Max Drawdown": float(maxdd),
+        "Max Drawdown %": float(maxdd) * 100,
+        "Win Rate": win_rate,
+        "Win Rate %": win_rate * 100,
+        "Profit Factor": profit_factor,
+        "Expectancy": expectancy,
+        "Avg Trade": avg_trade,
+        "Average Win": avg_win,
+        "Average Loss": avg_loss,
+        "Largest Win": largest_win,
+        "Largest Loss": largest_loss,
+        "Total Trades": len(trades_data),
+        "Winning Trades": len(winning_trades) if trades_data else 0,
+        "Losing Trades": len(losing_trades) if trades_data else 0,
+        "Max Consecutive Wins": max_consecutive_wins,
+        "Max Consecutive Losses": max_consecutive_losses,
+        "Volatility": vol,
+        "Volatility %": vol * 100
+    }
+
+
+def calculate_walk_forward_metrics(train_results: List[Dict], test_results: List[Dict]) -> Dict[str, Any]:
+    """
+    Calculate walk-forward optimization metrics
+    
+    Args:
+        train_results: Training period results
+        test_results: Testing period results
+    
+    Returns:
+        Dictionary with walk-forward metrics
+    """
+    if not test_results:
+        return {}
+    
+    # Calculate out-of-sample performance
+    all_returns = []
+    all_sharpes = []
+    all_drawdowns = []
+    all_trades = []
+    
+    for result in test_results:
+        metrics = result.get("metrics", {})
+        all_returns.append(metrics.get("Total Return", 0))
+        all_sharpes.append(metrics.get("Sharpe Ratio", 0))
+        all_drawdowns.append(metrics.get("Max Drawdown", 0))
+        all_trades.append(result.get("trades", 0))
+    
+    oos_performance = {
+        "Average Return": np.mean(all_returns),
+        "Total Return": np.sum(all_returns),
+        "Sharpe Ratio": np.mean(all_sharpes),
+        "Max Drawdown": np.mean(all_drawdowns),
+        "Total Trades": sum(all_trades),
+        "Consistency": len([r for r in all_returns if r > 0]) / len(all_returns) if all_returns else 0,
+        "Best Period": max(all_returns) if all_returns else 0,
+        "Worst Period": min(all_returns) if all_returns else 0
+    }
+    
+    return oos_performance
