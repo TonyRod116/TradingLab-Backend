@@ -32,7 +32,7 @@ DATA_DIR = BASE_DIR / 'data'
 SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool('DEBUG', default=False)
+DEBUG = env.bool('DEBUG', default=True)  # Changed default to True for local development
 
 if DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1'] # local frontend urls without protocols

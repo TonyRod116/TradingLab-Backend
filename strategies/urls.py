@@ -13,6 +13,10 @@ from .optimization_views import (
     GridSearchOptimizationView, WalkForwardOptimizationView,
     AvailableIndicatorsView, StrategyOptimizationView, OptimizationStatusView
 )
+from .pro_engine_views import (
+    ProBacktestView, PortfolioBacktestView, ProIndicatorsView,
+    ProEngineStatusView, ProStrategyExamplesView
+)
 
 router = DefaultRouter()
 router.register('', StrategyViewSet, basename='strategy')
@@ -33,6 +37,13 @@ urlpatterns = [
     path('optimization/indicators/', AvailableIndicatorsView.as_view(), name='available-indicators'),
     path('optimization/create-strategy/', StrategyOptimizationView.as_view(), name='create-optimized-strategy'),
     path('optimization/status/', OptimizationStatusView.as_view(), name='optimization-status'),
+    
+    # Pro Engine endpoints
+    path('pro/backtest/', ProBacktestView.as_view(), name='pro-backtest'),
+    path('pro/portfolio/', PortfolioBacktestView.as_view(), name='pro-portfolio'),
+    path('pro/indicators/', ProIndicatorsView.as_view(), name='pro-indicators'),
+    path('pro/status/', ProEngineStatusView.as_view(), name='pro-status'),
+    path('pro/examples/', ProStrategyExamplesView.as_view(), name='pro-examples'),
     
     path('', include(router.urls)),
 ]
