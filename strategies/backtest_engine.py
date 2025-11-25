@@ -118,10 +118,20 @@ class BacktestEngine:
             
             # Save trades in bulk for better performance
             if trades:
-                trade_objects = [
-                    Trade(backtest=backtest_result, **trade_data) 
-                    for trade_data in trades
-                ]
+                trade_objects = []
+                for trade_data in trades:
+                    # Map simulation fields to Trade model fields
+                    trade_objects.append(Trade(
+                        backtest=backtest_result,
+                        trade_type='BUY' if str(trade_data.get('action', 'buy')).lower() == 'buy' else 'SELL',
+                        entry_time=trade_data.get('entry_date'),
+                        exit_time=trade_data.get('exit_date'),
+                        entry_price=self._safe_decimal(trade_data.get('entry_price') or 0),
+                        exit_price=self._safe_decimal(trade_data.get('exit_price') or 0),
+                        quantity=self._safe_decimal(trade_data.get('quantity') or 0),
+                        pnl=self._safe_decimal(trade_data.get('net_pnl', trade_data.get('pnl')) or 0),
+                        commission=self._safe_decimal(trade_data.get('commission') or 0),
+                    ))
                 Trade.objects.bulk_create(trade_objects)
             
             # Build equity curve from trades (single source of truth)
