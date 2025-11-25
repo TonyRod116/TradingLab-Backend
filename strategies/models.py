@@ -61,12 +61,12 @@ class BacktestResult(models.Model):
     initial_capital = models.DecimalField(max_digits=15, decimal_places=2)
     
     # Performance metrics
-    total_return = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'))
-    annualized_return = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'))
-    sharpe_ratio = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'))
-    max_drawdown = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'))
-    win_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
-    profit_factor = models.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.0000'))
+    total_return = models.DecimalField(max_digits=20, decimal_places=4, default=Decimal('0.0000'))
+    annualized_return = models.DecimalField(max_digits=20, decimal_places=4, default=Decimal('0.0000'))
+    sharpe_ratio = models.DecimalField(max_digits=15, decimal_places=6, default=Decimal('0.000000'))
+    max_drawdown = models.DecimalField(max_digits=20, decimal_places=4, default=Decimal('0.0000'))
+    win_rate = models.DecimalField(max_digits=7, decimal_places=4, default=Decimal('0.0000'))
+    profit_factor = models.DecimalField(max_digits=15, decimal_places=6, default=Decimal('0.000000'))
     
     # Trade statistics
     total_trades = models.IntegerField(default=0)

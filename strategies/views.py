@@ -50,37 +50,42 @@ class StrategyViewSet(viewsets.ModelViewSet):
             return StrategyListSerializer
         elif self.action == 'create':
             return StrategyCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return StrategyCreateSerializer  # Use create serializer for updates to get normalization
         return StrategySerializer
     
     def get_queryset(self):
         """Return different querysets based on the action"""
-        # For list action (My Profile), show only user's own strategies
-        if self.action == 'list':
-            queryset = Strategy.objects.filter(user=self.request.user)
-        else:
-            # For detail actions, allow access to ALL strategies from all users
-            queryset = Strategy.objects.all()
+        base_queryset = Strategy.objects.all().select_related('user')
         
         if self.action == 'list':
-            # For list view, only prefetch the latest backtest
-            queryset = queryset.prefetch_related(
-                'backtests'
-            ).select_related('user')
-        else:
-            # For detail view, prefetch all backtests and trades with optimized queries
-            # CRITICAL: Ensure equity_curve data is loaded for all strategies
-            queryset = queryset.prefetch_related(
-                'backtests__trades',
-                'backtests__equity_curve'
-            ).select_related('user')
-            
-            # Force evaluation to ensure prefetch_related works
-            list(queryset)
+            queryset = base_queryset.filter(user=self.request.user).prefetch_related('backtests')
+            return queryset
         
+        if self.action in ['update', 'partial_update', 'destroy']:
+            # Minimal queryset without heavy prefetching to avoid unnecessary conversions
+            return base_queryset.filter(user=self.request.user)
+        
+        # For other detail actions, allow access to all strategies but prefetch related data
+        queryset = base_queryset.prefetch_related(
+            'backtests__trades',
+            'backtests__equity_curve'
+        )
+        
+        # Force evaluation to ensure prefetch_related works
+        list(queryset)
         return queryset
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    
+    def perform_update(self, serializer):
+        """Ensure user can only update their own strategies"""
+        strategy = self.get_object()
+        if strategy.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only update your own strategies")
+        serializer.save()
     
     def create(self, request, *args, **kwargs):
         """Create a new strategy with detailed logging"""
@@ -106,6 +111,36 @@ class StrategyViewSet(viewsets.ModelViewSet):
             logger.error(f"🔍 StrategyViewSet.create - Error type: {type(e)}")
             import traceback
             logger.error(f"🔍 StrategyViewSet.create - Traceback: {traceback.format_exc()}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def update(self, request, *args, **kwargs):
+        """Update an existing strategy with detailed logging"""
+        partial = kwargs.pop('partial', False)
+        try:
+            strategy = self.get_object()
+            logger.info(f"🔧 StrategyViewSet.update - User: {request.user}")
+            logger.info(f"🔧 StrategyViewSet.update - Strategy ID: {strategy.id}")
+            logger.info(f"🔧 StrategyViewSet.update - Partial: {partial}")
+            logger.info(f"🔧 StrategyViewSet.update - Incoming data: {request.data}")
+
+            if strategy.user != request.user:
+                logger.warning(f"🔧 StrategyViewSet.update - Forbidden update attempt by {request.user} on strategy {strategy.id}")
+                return Response({'error': 'You can only update your own strategies'}, status=status.HTTP_403_FORBIDDEN)
+
+            serializer = self.get_serializer(strategy, data=request.data, partial=partial)
+            if not serializer.is_valid():
+                logger.error(f"🔧 StrategyViewSet.update - Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer.save()
+            logger.info(f"🔧 StrategyViewSet.update - Strategy updated successfully: {strategy.id}")
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"🔧 StrategyViewSet.update - Error: {str(e)}")
+            logger.error(f"🔧 StrategyViewSet.update - Error type: {type(e)}")
+            import traceback
+            logger.error(f"🔧 StrategyViewSet.update - Traceback: {traceback.format_exc()}")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])

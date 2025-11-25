@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from .models import Strategy, Favorite
-from .serializers import StrategySummarySerializer, FavoritesOptimizedSerializer
+from .serializers import StrategySummarySerializer
 
 
 class FavoritesListView(APIView):
@@ -21,8 +21,8 @@ class FavoritesListView(APIView):
             # Extraer las estrategias de los favoritos
             strategies = [favorite.strategy for favorite in favorites]
             
-            # Usar el serializer optimizado para favoritos (más rápido)
-            serializer = FavoritesOptimizedSerializer(strategies, many=True, context={'request': request})
+            # Reutilizar el serializer que usa la vista de community para obtener los mismos datos
+            serializer = StrategySummarySerializer(strategies, many=True, context={'request': request})
             
             return Response({
                 'success': True,
