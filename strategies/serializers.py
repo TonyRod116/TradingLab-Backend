@@ -2,14 +2,25 @@
 Serializers for trading strategies and backtesting
 """
 
-from rest_framework import serializers
+from datetime import timedelta
 from decimal import Decimal
+
+from django.utils import timezone
+from rest_framework import serializers
+
 from .models import Strategy, BacktestResult, Trade, EquityCurvePoint
 from .enums import (
     SUPPORTED_SYMBOLS, SUPPORTED_TIMEFRAMES, SUPPORTED_INDICATORS, SUPPORTED_OPERATORS,
     STOP_LOSS_TYPES, TAKE_PROFIT_TYPES, STRATEGY_STATUS, RULE_TYPES, ACTION_TYPES, LOGICAL_OPERATORS
 )
-from .normalizers import normalize_symbol, normalize_timeframe, normalize_stop_take, preflight_feasibility, normalize_indicator_name, normalize_operator
+from .normalizers import (
+    normalize_symbol,
+    normalize_timeframe,
+    normalize_stop_take,
+    preflight_feasibility,
+    normalize_indicator_name,
+    normalize_operator,
+)
 
 
 class RuleConditionSerializer(serializers.Serializer):
@@ -256,6 +267,7 @@ class StrategySummarySerializer(serializers.ModelSerializer):
     total_return_percent = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     rating_color = serializers.SerializerMethodField()
+    equity_curve = serializers.SerializerMethodField()
     
     def get_win_rate(self, obj):
         """Get win_rate from latest backtest as percentage"""
@@ -323,8 +335,8 @@ class StrategySummarySerializer(serializers.ModelSerializer):
                 return "Good"
             elif win_rate >= 40 and profit_factor >= 1.0:
                 return "Average"
-            else:
-                return "Poor"
+        else:
+            return "Poor"
         return None
     
     def get_rating_color(self, obj):
@@ -339,6 +351,13 @@ class StrategySummarySerializer(serializers.ModelSerializer):
         else:
             return "red"
     
+    def get_equity_curve(self, obj):
+        """Get equity curve from latest backtest"""
+        latest_backtest = obj.backtests.first()
+        if latest_backtest and hasattr(latest_backtest, 'equity_curve'):
+            return latest_backtest.equity_curve.all().values('timestamp', 'equity', 'drawdown')
+        return []
+    
     class Meta:
         model = Strategy
         fields = [
@@ -349,7 +368,7 @@ class StrategySummarySerializer(serializers.ModelSerializer):
             # Backtest metrics
             'win_rate', 'total_trades', 'profit_factor', 'max_drawdown', 
             'sharpe_ratio', 'total_return', 'total_return_percent', 
-            'rating', 'rating_color'
+            'rating', 'rating_color', 'equity_curve'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
 
@@ -480,16 +499,30 @@ class StrategyListSerializer(serializers.ModelSerializer):
 
 class BacktestRequestSerializer(serializers.Serializer):
     """Serializer for backtest requests"""
-    
-    start_date = serializers.DateTimeField()
-    end_date = serializers.DateTimeField()
+
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
     initial_capital = serializers.DecimalField(max_digits=15, decimal_places=2, required=False)
     commission = serializers.DecimalField(max_digits=10, decimal_places=2, default=Decimal('4.00'))
-    slippage = serializers.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.25'))
-    
+    slippage = serializers.DecimalField(max_digits=10, decimal_places=4, default=Decimal('0.5'))
+
+    symbol = serializers.ChoiceField(choices=SUPPORTED_SYMBOLS, required=False)
+    timeframe = serializers.ChoiceField(choices=SUPPORTED_TIMEFRAMES, required=False)
+    stop_loss_type = serializers.ChoiceField(choices=STOP_LOSS_TYPES, required=False)
+    stop_loss_value = serializers.DecimalField(max_digits=10, decimal_places=4, required=False)
+    take_profit_type = serializers.ChoiceField(choices=TAKE_PROFIT_TYPES, required=False)
+    take_profit_value = serializers.DecimalField(max_digits=10, decimal_places=4, required=False)
+
     def validate(self, data):
-        if data['start_date'] >= data['end_date']:
+        # Default to last 90 days when frontend omits the date range
+        end_date = data.get('end_date') or timezone.now()
+        start_date = data.get('start_date') or (end_date - timedelta(days=90))
+
+        if start_date >= end_date:
             raise serializers.ValidationError("Start date must be before end date")
+
+        data['start_date'] = start_date
+        data['end_date'] = end_date
         return data
 
 
